@@ -1,0 +1,322 @@
+[
+  {
+    "objectId": 1,
+    "name": "GCP Point 1-1",
+    "lat": 37.5665,
+    "lon": 126.9780,
+    "rel_alt": 50,
+    "note": "서울 시청 인근 - 기준점"
+  },
+  {
+    "objectId": 2,
+    "name": "GCP Point 1-2",
+    "lat": 37.5675,
+    "lon": 126.9790,
+    "rel_alt": 51,
+    "note": "서울 시청 북동쪽 100m"
+  },
+  {
+    "objectId": 3,
+    "name": "GCP Point 1-3",
+    "lat": 37.5660,
+    "lon": 126.9800,
+    "rel_alt": 49,
+    "note": "서울 시청 남동쪽 150m"
+  },
+  {
+    "objectId": 4,
+    "name": "GCP Point 1-4",
+    "lat": 37.5685,
+    "lon": 126.9770,
+    "rel_alt": 52,
+    "note": "서울 시청 북서쪽 200m"
+  },
+  {
+    "objectId": 5,
+    "name": "GCP Point 1-5",
+    "lat": 37.5655,
+    "lon": 126.9760,
+    "rel_alt": 48,
+    "note": "서울 시청 남서쪽 120m"
+  },
+  {
+    "objectId": 6,
+    "name": "GCP Point 2-1",
+    "lat": 35.1796,
+    "lon": 129.0756,
+    "rel_alt": 15,
+    "note": "부산 해운대 인근 - 기준점"
+  },
+  {
+    "objectId": 7,
+    "name": "GCP Point 2-2",
+    "lat": 35.1806,
+    "lon": 129.0766,
+    "rel_alt": 16,
+    "note": "부산 해운대 북동쪽 130m"
+  },
+  {
+    "objectId": 8,
+    "name": "GCP Point 2-3",
+    "lat": 35.1786,
+    "lon": 129.0776,
+    "rel_alt": 14,
+    "note": "부산 해운대 남동쪽 170m"
+  },
+  {
+    "objectId": 9,
+    "name": "GCP Point 2-4",
+    "lat": 35.1816,
+    "lon": 129.0746,
+    "rel_alt": 17,
+    "note": "부산 해운대 북서쪽 210m"
+  },
+  {
+    "objectId": 10,
+    "name": "GCP Point 2-5",
+    "lat": 35.1776,
+    "lon": 129.0736,
+    "rel_alt": 13,
+    "note": "부산 해운대 남서쪽 180m"
+  },
+  {
+    "objectId": 11,
+    "name": "GCP Point 3-1",
+    "lat": 33.4890,
+    "lon": 126.4983,
+    "rel_alt": 78,
+    "note": "제주 한라산 기슭 - 기준점"
+  },
+  {
+    "objectId": 12,
+    "name": "GCP Point 3-2",
+    "lat": 33.4910,
+    "lon": 126.4993,
+    "rel_alt": 80,
+    "note": "제주 한라산 북동쪽 230m"
+  },
+  {
+    "objectId": 13,
+    "name": "GCP Point 3-3",
+    "lat": 33.4880,
+    "lon": 126.5003,
+    "rel_alt": 76,
+    "note": "제주 한라산 남동쪽 190m"
+  },
+  {
+    "objectId": 14,
+    "name": "GCP Point 3-4",
+    "lat": 33.4920,
+    "lon": 126.4963,
+    "rel_alt": 81,
+    "note": "제주 한라산 북서쪽 270m"
+  },
+  {
+    "objectId": 15,
+    "name": "GCP Point 3-5",
+    "lat": 33.4870,
+    "lon": 126.4953,
+    "rel_alt": 75,
+    "note": "제주 한라산 남서쪽 220m"
+  },
+  {
+    "objectId": 16,
+    "name": "GCP Point 4-1",
+    "lat": 36.3504,
+    "lon": 127.3845,
+    "rel_alt": 42,
+    "note": "대전 유성구 - 기준점"
+  },
+  {
+    "objectId": 17,
+    "name": "GCP Point 4-2",
+    "lat": 36.3524,
+    "lon": 127.3855,
+    "rel_alt": 43,
+    "note": "대전 유성구 북동쪽 240m"
+  },
+  {
+    "objectId": 18,
+    "name": "GCP Point 4-3",
+    "lat": 36.3494,
+    "lon": 127.3865,
+    "rel_alt": 41,
+    "note": "대전 유성구 남동쪽 190m"
+  },
+  {
+    "objectId": 19,
+    "name": "GCP Point 4-4",
+    "lat": 36.3534,
+    "lon": 127.3835,
+    "rel_alt": 44,
+    "note": "대전 유성구 북서쪽 320m"
+  },
+  {
+    "objectId": 20,
+    "name": "GCP Point 4-5",
+    "lat": 36.3484,
+    "lon": 127.3825,
+    "rel_alt": 40,
+    "note": "대전 유성구 남서쪽 250m"
+  },
+  {
+    "objectId": 21,
+    "name": "GCP Point 5-1",
+    "lat": 35.8714,
+    "lon": 128.6014,
+    "rel_alt": 25,
+    "note": "대구 중구 - 기준점"
+  },
+  {
+    "objectId": 22,
+    "name": "GCP Point 5-2",
+    "lat": 35.8734,
+    "lon": 128.6024,
+    "rel_alt": 26,
+    "note": "대구 중구 북동쪽 230m"
+  },
+  {
+    "objectId": 23,
+    "name": "GCP Point 5-3",
+    "lat": 35.8704,
+    "lon": 128.6034,
+    "rel_alt": 24,
+    "note": "대구 중구 남동쪽 190m"
+  },
+  {
+    "objectId": 24,
+    "name": "GCP Point 5-4",
+    "lat": 35.8744,
+    "lon": 128.6004,
+    "rel_alt": 27,
+    "note": "대구 중구 북서쪽 310m"
+  },
+  {
+    "objectId": 25,
+    "name": "GCP Point 5-5",
+    "lat": 35.8694,
+    "lon": 128.5994,
+    "rel_alt": 23,
+    "note": "대구 중구 남서쪽 240m"
+  },
+  {
+    "objectId": 26,
+    "name": "GCP Point 6-1",
+    "lat": 37.4563,
+    "lon": 126.7052,
+    "rel_alt": 12,
+    "note": "인천 송도 - 기준점"
+  },
+  {
+    "objectId": 27,
+    "name": "GCP Point 7",
+    "lat": 35.1595,
+    "lon": 126.8526,
+    "rel_alt": 38,
+    "note": "광주 동구"
+  },
+  {
+    "objectId": 28,
+    "name": "GCP Point 8",
+    "lat": 37.8856,
+    "lon": 127.7364,
+    "rel_alt": 150,
+    "note": "강원도 춘천"
+  },
+  {
+    "objectId": 29,
+    "name": "GCP Point 9",
+    "lat": 36.0190,
+    "lon": 129.3435,
+    "rel_alt": 5,
+    "note": "포항 해안가"
+  },
+  {
+    "objectId": 30,
+    "name": "GCP Point 10",
+    "lat": 34.8118,
+    "lon": 126.3949,
+    "rel_alt": 22,
+    "note": "목포 항구"
+  },
+  {
+    "objectId": 31,
+    "name": "GCP Point 11",
+    "lat": 38.1202,
+    "lon": 128.5959,
+    "rel_alt": 8,
+    "note": "강원도 속초"
+  },
+  {
+    "objectId": 32,
+    "name": "GCP Point 12",
+    "lat": 36.7883,
+    "lon": 127.0046,
+    "rel_alt": 63,
+    "note": "충청남도 천안"
+  },
+  {
+    "objectId": 33,
+    "name": "GCP Point 13",
+    "lat": 35.5384,
+    "lon": 129.3114,
+    "rel_alt": 18,
+    "note": "울산 남구"
+  },
+  {
+    "objectId": 34,
+    "name": "GCP Point 14",
+    "lat": 34.7603,
+    "lon": 127.6622,
+    "rel_alt": 45,
+    "note": "여수 엑스포 공원"
+  },
+  {
+    "objectId": 35,
+    "name": "GCP Point 15",
+    "lat": 37.2636,
+    "lon": 127.0286,
+    "rel_alt": 32,
+    "note": "경기도 수원"
+  },
+  {
+    "objectId": 36,
+    "name": "GCP Point 16",
+    "lat": 36.5684,
+    "lon": 128.7294,
+    "rel_alt": 95,
+    "note": "경상북도 안동"
+  },
+  {
+    "objectId": 37,
+    "name": "GCP Point 17",
+    "lat": 35.8242,
+    "lon": 127.1480,
+    "rel_alt": 53,
+    "note": "전라북도 전주"
+  },
+  {
+    "objectId": 38,
+    "name": "GCP Point 18",
+    "lat": 37.7499,
+    "lon": 128.8783,
+    "rel_alt": 3,
+    "note": "강원도 강릉 해안"
+  },
+  {
+    "objectId": 39,
+    "name": "GCP Point 19",
+    "lat": 36.9786,
+    "lon": 127.9134,
+    "rel_alt": 88,
+    "note": "충청북도 충주"
+  },
+  {
+    "objectId": 40,
+    "name": "GCP Point 20",
+    "lat": 33.2496,
+    "lon": 126.5630,
+    "rel_alt": 120,
+    "note": "제주 성산일출봉"
+  }
+]
