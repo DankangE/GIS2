@@ -38,9 +38,16 @@ const TestGrid = () => {
     fetch("/jsondatas/gcpData.json")
       .then((res) => res.json())
       .then((jsonData) => {
-        setData(jsonData);
+        // 위도/경도/고도 값을 문자열로 변환
+        const processedData = jsonData.map((item) => ({
+          ...item,
+          lat: item.lat.toString(),
+          lon: item.lon.toString(),
+          rel_alt: item.rel_alt.toString(),
+        }));
+        setData(processedData);
         setTimeout(() => {
-          if (gridRef.current && jsonData.length > 0) {
+          if (gridRef.current && processedData.length > 0) {
             const grid = gridRef.current.getInstance();
             grid.focus(0, "name");
             handleFocusChange({ rowKey: 0 });

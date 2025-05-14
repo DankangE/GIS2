@@ -12,16 +12,16 @@ import { Button, Stack } from "@mui/material";
 // CSS 스타일 추가 - blue, orange-border, green-border, yellow-bg 클래스 정의
 const gridStyle = document.createElement("style");
 gridStyle.textContent = `
-  .selected-bg {
-    background-color: #e5f6ff !important;
-  }
-  .updated-bg {
-    background-color: #fff9c4 !important;
-  }
-  .created-bg {
-    background-color: #f0fff0 !important;
-  }
-`;
+    .selected-bg {
+      background-color: #e5f6ff !important;
+    }
+    .updated-bg {
+      background-color: #fff9c4 !important;
+    }
+    .created-bg {
+      background-color: #f0fff0 !important;
+    }
+  `;
 document.head.appendChild(gridStyle);
 
 const REQUIRED_FIELDS = [
@@ -33,10 +33,10 @@ const REQUIRED_FIELDS = [
 /**
  * 지리좌표(GCP) 데이터를 표시하고 관리하는 그리드 컴포넌트
  */
-const GCPGrid = forwardRef(
+const LandingGrid = forwardRef(
   (
     {
-      gcpData,
+      landingData,
       handleGridDataChange,
       handleGridSave,
       handleRequestAddPoint,
@@ -49,13 +49,13 @@ const GCPGrid = forwardRef(
     // 그리드에 표시될 데이터 상태
     const [data, setData] = useState([]);
     // 그리드 컴포넌트에 대한 참조
-    const [gridData, setGridData] = useState(gcpData);
+    const [gridData, setGridData] = useState(landingData);
     const gridRef = useRef(null);
 
     // gcpData가 변경될 때 gridData 업데이트
     useEffect(() => {
-      setGridData(gcpData);
-    }, [gcpData]);
+      setGridData(landingData);
+    }, [landingData]);
 
     // gridData가 변경될 때 부모 컴포넌트에 알림
     useEffect(() => {
@@ -64,19 +64,19 @@ const GCPGrid = forwardRef(
 
     // 초기 데이터 설정
     useEffect(() => {
-      if (gridRef.current && gcpData) {
+      if (gridRef.current && landingData) {
         const grid = gridRef.current.getInstance();
-        grid.resetData(gcpData);
-        setData(gcpData);
+        grid.resetData(landingData);
+        setData(landingData);
         setTimeout(() => {
-          if (gridRef.current && gcpData.length > 0) {
+          if (gridRef.current && landingData.length > 0) {
             const grid = gridRef.current.getInstance();
             grid.focus(0, "name");
             handleFocusChange({ rowKey: 0 });
           }
         }, 100);
       }
-    }, [gcpData]);
+    }, [landingData]);
 
     // 유효성 검사 함수
     const validateRows = (rows) => {
@@ -143,13 +143,6 @@ const GCPGrid = forwardRef(
           type: "text",
           options: { useViewMode: false, placeholder: "*필수값입니다." },
         },
-        align: "right",
-      },
-      {
-        name: "rel_alt",
-        header: "고도",
-        width: 100,
-        editor: "text",
         align: "right",
       },
       { name: "note", header: "비고", width: 570, editor: "text" },
@@ -286,19 +279,19 @@ const GCPGrid = forwardRef(
 
     // 저장 후 데이터 재조회
     useEffect(() => {
-      if (gridRef.current && gcpData) {
+      if (gridRef.current && landingData) {
         const grid = gridRef.current.getInstance();
-        grid.resetData(gcpData);
-        setData(gcpData);
+        grid.resetData(landingData);
+        setData(landingData);
         setTimeout(() => {
-          if (gridRef.current && gcpData.length > 0) {
+          if (gridRef.current && landingData.length > 0) {
             const grid = gridRef.current.getInstance();
             grid.focus(0, "name");
             handleFocusChange({ rowKey: 0 });
           }
         }, 100);
       }
-    }, [gcpData]);
+    }, [landingData]);
 
     // 셀 변경 시 변경 표시 갱신 및 포인트 추가 요청, 그리고 row 업데이트 콜백 호출
     const handleAfterChange = (ev) => {
@@ -439,4 +432,4 @@ const GCPGrid = forwardRef(
   }
 );
 
-export default GCPGrid;
+export default LandingGrid;
