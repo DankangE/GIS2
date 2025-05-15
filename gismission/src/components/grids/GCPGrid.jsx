@@ -315,11 +315,13 @@ const GCPGrid = forwardRef(
           const columnName = change.columnName;
           const row = allData.find((r) => r.rowKey === rowKey);
 
-          // name 컬럼이 변경된 경우에만 map에 라벨 변경 요청
+          // name, lat, lon 컬럼이 변경된 경우 map에 업데이트 요청
           if (
             row &&
             typeof handleRowUpdate === "function" &&
-            columnName === "name"
+            (columnName === "name" ||
+              columnName === "lat" ||
+              columnName === "lon")
           ) {
             handleRowUpdate(row);
           }
@@ -395,6 +397,22 @@ const GCPGrid = forwardRef(
           grid.focus(row.rowKey, "name");
           handleFocusChange({ rowKey: row.rowKey });
         }
+      },
+      clearAllSelectedBg: () => {
+        if (!gridRef.current) return;
+        const grid = gridRef.current.getInstance();
+        const allData = grid.getData();
+        allData.forEach((row) => {
+          grid.removeRowClassName(row.rowKey, "selected-bg");
+        });
+      },
+      clearSelection: () => {
+        if (!gridRef.current) return;
+        const grid = gridRef.current.getInstance();
+        const allData = grid.getData();
+        allData.forEach((row) => {
+          grid.removeRowClassName(row.rowKey, "selected-bg");
+        });
       },
     }));
 

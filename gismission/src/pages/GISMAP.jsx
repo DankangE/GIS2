@@ -3,6 +3,7 @@ import { Tabs, Tab, Box } from "@mui/material";
 import MapTest from "../components/maps/Map.jsx";
 import GCPGrid from "../components/grids/GCPGrid.jsx";
 import LandingGrid from "../components/grids/LandingGrid.jsx";
+import MissionGrid from "../components/grids/MissionGrid.jsx";
 
 export default function GISMAP() {
   // 현재 선택된 탭 상태
@@ -31,9 +32,15 @@ export default function GISMAP() {
     setCurrentTab(newValue);
     // 탭 변경 시 수정된 데이터 초기화
     setModifiedData([]);
+    // 탭 변경 시 그리드의 선택된 행 배경색 초기화
+    if (
+      gridRef.current &&
+      typeof gridRef.current.clearAllSelectedBg === "function"
+    ) {
+      gridRef.current.clearAllSelectedBg();
+    }
   };
 
-  // 초기 데이터 로드
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -42,15 +49,15 @@ export default function GISMAP() {
         const gcpData = await gcpResponse.json();
         setGcpData(gcpData);
 
-        // TODO: 이착륙 데이터 로드
+        // 이착륙 데이터 로드
         const landingResponse = await fetch("/jsondatas/landingData.json");
         const landingData = await landingResponse.json();
         setLandingData(landingData);
 
-        // TODO: 임무 데이터 로드
-        // const missionResponse = await fetch("/jsondatas/missionData.json");
-        // const missionData = await missionResponse.json();
-        // setMissionData(missionData);
+        // 임무 데이터 로드
+        const missionResponse = await fetch("/jsondatas/missionData.json");
+        const missionData = await missionResponse.json();
+        setMissionData(missionData);
       } catch (error) {
         console.error("데이터 로드 실패:", error);
       }
@@ -102,8 +109,18 @@ export default function GISMAP() {
           />
         );
       case 2:
-        // TODO: 임무 그리드 컴포넌트
-        return <div>임무 그리드</div>;
+        return (
+          <MissionGrid
+            ref={gridRef}
+            missionData={missionData}
+            handleGridDataChange={handleGridDataChange}
+            handleGridSave={handleGridSave}
+            handleRequestAddPoint={handleRequestAddPoint}
+            handleRowUpdate={handleRowUpdate}
+            handleDeleteRow={handleDeleteRow}
+            onRowFocus={handleGridRowFocus}
+          />
+        );
       default:
         return null;
     }

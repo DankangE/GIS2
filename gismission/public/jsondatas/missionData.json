@@ -1,0 +1,158 @@
+{
+  "features": [
+    {
+      "type": "Feature",
+      "objectId": 1,
+      "properties": {
+        "name": "서울 직선 경로",
+        "notes": "서울시청에서 남산까지 직선 경로"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [126.978, 37.5665],
+          [126.995, 37.5510]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 2,
+      "properties": {
+        "name": "부산 직선 경로",
+        "notes": "부산역에서 해운대까지 직선 경로"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [129.0403, 35.1151],
+          [129.158, 35.1632]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 3,
+      "properties": {
+        "name": "광주 직선 경로",
+        "notes": "광주역에서 518기념공원까지 직선 경로"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [126.9115, 35.1601],
+          [126.8947, 35.1547]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 4,
+      "properties": {
+        "name": "대구 사각형 경로",
+        "notes": "대구 중심 사각형 순찰 경로"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [128.5912, 35.8714],
+          [128.6012, 35.8714],
+          [128.6012, 35.8814],
+          [128.5912, 35.8814],
+          [128.5912, 35.8714]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 5,
+      "properties": {
+        "name": "제주 원형 구역",
+        "notes": "제주국제공항 중심 원형 구역"
+      },
+      "geometry": {
+        "type": "Circle",
+        "coordinates": [126.4931, 33.5050],
+        "radius": 3000
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 6,
+      "properties": {
+        "name": "강릉 원형 구역",
+        "notes": "강릉역 중심 원형 구역"
+      },
+      "geometry": {
+        "type": "Circle",
+        "coordinates": [128.8995, 37.7556],
+        "radius": 2000
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 7,
+      "properties": {
+        "name": "전주 사각형 구역",
+        "notes": "전주한옥마을 주변 사각형 구역"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [127.148, 35.814],
+          [127.158, 35.814],
+          [127.158, 35.824],
+          [127.148, 35.824],
+          [127.148, 35.814]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 8,
+      "properties": {
+        "name": "울산 다각형 구역",
+        "notes": "울산대공원 주변 다각형 구역"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [129.311, 35.535],
+          [129.321, 35.535],
+          [129.326, 35.545],
+          [129.316, 35.555],
+          [129.306, 35.545],
+          [129.311, 35.535]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 9,
+      "properties": {
+        "name": "인천 직선 경로",
+        "notes": "인천공항에서 송도까지 직선 경로"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [126.4505, 37.4602],
+          [126.6328, 37.3826]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "objectId": 10,
+      "properties": {
+        "name": "포항 원형 구역",
+        "notes": "포항역 중심 원형 구역"
+      },
+      "geometry": {
+        "type": "Circle",
+        "coordinates": [129.3656, 36.0151],
+        "radius": 2500
+      }
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import {
   createGcpPointsLayer,
   createPointFeature,
 } from "./mapObjects/GCPObjects.jsx";
+import { createLandingPointsLayer } from "./mapObjects/LandingObjects.jsx";
 import AddButton from "../../components/buttons/AddButton.jsx";
 import DeleteButton from "../../components/buttons/DeleteButton.jsx";
 import MoveButton from "../../components/buttons/MoveButton.jsx";
@@ -26,7 +27,7 @@ import { Style, Circle, Fill, Stroke, Text } from "ol/style";
 // 초기 설정
 const MAP_CONFIG = {
   INITIAL_CENTER: [126.978, 37.5665], // 서울시청
-  INITIAL_ZOOM: 10,
+  INITIAL_ZOOM: 15,
   MIN_ZOOM: 7,
   MAX_ZOOM: 20,
   PROJECTION: "EPSG:3857",
@@ -83,9 +84,10 @@ const MapTest = forwardRef(
     const isMovingPointRef = useRef(false);
     const selectInteractionRef = useRef(null);
     const translateInteractionRef = useRef(null);
+    const gcpGridRef = useRef(null);
 
     // 현재 탭에 맞는 레이어 반환
-    const getCurrentLayer = () => {
+    const getCurrentLayer = useCallback(() => {
       switch (currentTab) {
         case 0:
           return gcpLayerRef.current;
@@ -96,13 +98,11 @@ const MapTest = forwardRef(
         default:
           return gcpLayerRef.current;
       }
-    };
+    }, [currentTab]);
 
     // 포인트 추가 모드 토글 핸들러
     const handleToggleAddingMode = useCallback((isAdding) => {
       isAddingPointRef.current = isAdding;
-
-      // 다른 모드들 비활성화
       if (isAdding) {
         if (isDeletingPointRef.current) {
           isDeletingPointRef.current = false;
@@ -116,8 +116,6 @@ const MapTest = forwardRef(
             handleToggleMovingMode.reset(false);
           }
         }
-
-        // Select 및 Translate 상호작용 비활성화
         if (selectInteractionRef.current) {
           selectInteractionRef.current.setActive(false);
         }
@@ -125,17 +123,11 @@ const MapTest = forwardRef(
           translateInteractionRef.current.setActive(false);
         }
       }
-
-      console.log(
-        isAdding ? "포인트 추가 모드 활성화" : "포인트 추가 모드 비활성화"
-      );
     }, []);
 
     // 포인트 삭제 모드 토글 핸들러
     const handleToggleDeletingMode = useCallback((isDeleting) => {
       isDeletingPointRef.current = isDeleting;
-
-      // 다른 모드들 비활성화
       if (isDeleting) {
         if (isAddingPointRef.current) {
           isAddingPointRef.current = false;
@@ -149,8 +141,6 @@ const MapTest = forwardRef(
             handleToggleMovingMode.reset(false);
           }
         }
-
-        // Select 및 Translate 상호작용 비활성화
         if (selectInteractionRef.current) {
           selectInteractionRef.current.setActive(false);
         }
@@ -158,17 +148,11 @@ const MapTest = forwardRef(
           translateInteractionRef.current.setActive(false);
         }
       }
-
-      console.log(
-        isDeleting ? "포인트 삭제 모드 활성화" : "포인트 삭제 모드 비활성화"
-      );
     }, []);
 
     // 포인트 이동 모드 토글 핸들러
     const handleToggleMovingMode = useCallback((isMoving) => {
       isMovingPointRef.current = isMoving;
-
-      // 다른 모드들 비활성화
       if (isMoving) {
         if (isAddingPointRef.current) {
           isAddingPointRef.current = false;
@@ -182,7 +166,6 @@ const MapTest = forwardRef(
             handleToggleDeletingMode.reset(false);
           }
         }
-        // Select 및 Translate 상호작용 활성화
         if (selectInteractionRef.current) {
           selectInteractionRef.current.setActive(true);
         }
@@ -190,41 +173,28 @@ const MapTest = forwardRef(
           translateInteractionRef.current.setActive(true);
         }
       } else {
-        // 이동 모드 해제 시 Select 활성화
         if (selectInteractionRef.current) {
           selectInteractionRef.current.setActive(true);
-          // 선택 해제
           selectInteractionRef.current.getFeatures().clear();
         }
         if (translateInteractionRef.current) {
           translateInteractionRef.current.setActive(false);
         }
       }
-      console.log(
-        isMoving ? "포인트 이동 모드 활성화" : "포인트 이동 모드 비활성화"
-      );
     }, []);
 
+    // 지도 초기화 (컴포넌트 마운트 시 한 번만 실행)
     useEffect(() => {
-      console.log("useEffect 실행 - 지도 초기화");
-      if (!mapContent.current) {
-        return;
-      }
+      if (!mapContent.current) return;
 
-      // GCP 포인트 레이어 생성
       const { vectorLayer: gcpLayer, vectorSource: gcpSource } =
         createGcpPointsLayer();
       gcpLayerRef.current = { layer: gcpLayer, source: gcpSource };
 
-      // TODO: 이착륙 레이어 생성
-      // const { vectorLayer: landingLayer, vectorSource: landingSource } = createLandingLayer();
-      // landingLayerRef.current = { layer: landingLayer, source: landingSource };
+      const { vectorLayer: landingLayer, vectorSource: landingSource } =
+        createLandingPointsLayer();
+      landingLayerRef.current = { layer: landingLayer, source: landingSource };
 
-      // TODO: 임무 레이어 생성
-      // const { vectorLayer: missionLayer, vectorSource: missionSource } = createMissionLayer();
-      // missionLayerRef.current = { layer: missionLayer, source: missionSource };
-
-      // 지도 초기화
       const map = new OlMap({
         controls: defaultControls({ zoom: false, rotate: false }).extend([]),
         layers: [
@@ -233,8 +203,8 @@ const MapTest = forwardRef(
               url: MAP_CONFIG.TILE_URL,
             }),
           }),
-          gcpLayer, // GCP 포인트 레이어만 추가
-          // TODO: 다른 레이어들 추가
+          gcpLayer,
+          landingLayer,
         ],
         view: new View({
           projection: getProjection(MAP_CONFIG.PROJECTION),
@@ -246,7 +216,6 @@ const MapTest = forwardRef(
         target: mapContent.current,
       });
 
-      // Select 상호작용 생성 (포인트 선택용)
       const select = new Select({
         layers: [gcpLayer],
         condition: click,
@@ -257,21 +226,17 @@ const MapTest = forwardRef(
         },
       });
 
-      // Translate 상호작용 생성 (포인트 이동용)
       const translate = new Translate({
-        features: select.getFeatures(), // Select에서 선택된 피처를 사용
+        features: select.getFeatures(),
       });
 
-      // 이동 완료 이벤트 처리
       translate.on("translateend", function (event) {
         const features = event.features.getArray();
         features.forEach((feature) => {
-          // 새 좌표 계산
           const geometry = feature.getGeometry();
           const coords = geometry.getCoordinates();
           const [lon, lat] = toLonLat(coords);
 
-          // 피처 속성 업데이트
           const props = feature.get("properties");
           if (props) {
             props.lon = parseFloat(lon);
@@ -279,7 +244,6 @@ const MapTest = forwardRef(
             feature.set("properties", { ...props });
             feature.changed();
 
-            // 상위 콜백 호출 (그리드에 위도/경도 반영)
             if (typeof handleFeatureMoved === "function") {
               handleFeatureMoved({
                 objectId: props.objectId,
@@ -287,64 +251,39 @@ const MapTest = forwardRef(
                 lon: props.lon,
               });
             }
-
-            // 위치 변경 로그
-            console.log(`"${props.name}" 이동 완료:`, {
-              포인트ID: props.objectId,
-              이름: props.name,
-              새위치: {
-                위도: props.lat,
-                경도: props.lon,
-              },
-              메모: props.note || "없음",
-            });
           }
         });
       });
 
-      // 초기에는 select 활성화
       select.setActive(true);
       translate.setActive(false);
 
-      // 지도에 상호작용 추가
       map.addInteraction(select);
       map.addInteraction(translate);
 
-      // 상호작용 참조 저장
       selectInteractionRef.current = select;
       translateInteractionRef.current = translate;
-
       mapRef.current = map;
 
-      // gcpData를 지도에 표시
       if (gcpData && Array.isArray(gcpData)) {
         const features = gcpData.map((item) => createPointFeature(item));
         gcpSource.clear();
         gcpSource.addFeatures(features);
         pointFeaturesRef.current = features;
-        // 다음 objectId 계산
-        const maxObjectId = gcpData.reduce(
-          (max, item) => (item.objectId > max ? item.objectId : max),
-          0
-        );
-        nextObjectIdRef.current = maxObjectId + 1;
+        nextObjectIdRef.current =
+          gcpData.reduce(
+            (max, item) => (item.objectId > max ? item.objectId : max),
+            0
+          ) + 1;
       }
 
-      // 지도 클릭 이벤트 핸들러
       const handleMapClick = (event) => {
-        // 이동 모드일 때는 기본 Select/Translate 인터랙션이 처리
-        if (isMovingPointRef.current) {
-          console.log("[handleMapClick] 이동 모드 - 무시");
-          return;
-        }
+        if (isMovingPointRef.current) return;
 
-        // 포인트 추가 모드인 경우
         if (isAddingPointRef.current) {
-          console.log("[handleMapClick] 추가 모드");
           const clickCoord = event.coordinate;
           const [lon, lat] = toLonLat(clickCoord);
 
-          // 새 포인트 생성
           const newPoint = {
             objectId: nextObjectIdRef.current,
             name: `새 포인트`,
@@ -354,88 +293,65 @@ const MapTest = forwardRef(
             note: "",
           };
 
-          console.log("새 포인트 생성:", newPoint);
-
-          // 포인트 추가
           const newFeature = createPointFeature(newPoint);
           gcpSource.addFeature(newFeature);
-
-          // 데이터 업데이트
           pointFeaturesRef.current.push(newFeature);
           nextObjectIdRef.current++;
 
-          // 상위 콜백 호출 (그리드에 행 추가)
           if (typeof handleMapPointAdded === "function") {
             handleMapPointAdded(newPoint);
           }
 
-          // 모드 초기화 - AddButton 컴포넌트에게 알림
           isAddingPointRef.current = false;
-
-          // 포인트 추가가 완료되면 버튼 상태 초기화
           if (handleToggleAddingMode.reset) {
             handleToggleAddingMode.reset(false);
-          } else {
-            handleToggleAddingMode(false);
           }
           return;
         }
 
-        // 포인트 삭제 모드인 경우
         if (isDeletingPointRef.current) {
-          console.log("[handleMapClick] 삭제 모드");
-          // 클릭한 지점에서 가장 가까운 피처 찾기
           const clickPixel = map.getEventPixel(event.originalEvent);
           let closestFeature = null;
 
           map.forEachFeatureAtPixel(clickPixel, (feature) => {
             closestFeature = feature;
-            return true; // 첫 번째 피처만 반환
+            return true;
           });
 
           if (closestFeature) {
             const featureProps = closestFeature.get("properties");
-            console.log("삭제할 포인트:", featureProps);
+            const currentObjectId = featureProps.objectId;
 
-            // 피처 삭제
             gcpSource.removeFeature(closestFeature);
-
-            // 데이터 업데이트
             pointFeaturesRef.current = pointFeaturesRef.current.filter(
               (feature) => feature !== closestFeature
             );
 
-            // 상위 컴포넌트에 삭제 알림
             if (typeof handleFeatureDeleted === "function") {
-              handleFeatureDeleted(featureProps.objectId);
+              handleFeatureDeleted(currentObjectId);
             }
 
-            console.log(`포인트 "${featureProps.name}" 삭제됨`);
+            if (typeof onFeatureSelect === "function") {
+              const nextFeature = pointFeaturesRef.current.find(
+                (feature) =>
+                  feature.get("properties").objectId > currentObjectId
+              );
+              if (nextFeature) {
+                onFeatureSelect(nextFeature.get("properties").objectId);
+              }
+            }
 
-            // 모드 초기화 - DeleteButton 컴포넌트에게 알림
             isDeletingPointRef.current = false;
-
-            // 포인트 삭제가 완료되면 버튼 상태 초기화
             if (handleToggleDeletingMode.reset) {
               handleToggleDeletingMode.reset(false);
-            } else {
-              handleToggleDeletingMode(false);
             }
-          } else {
-            console.log("삭제할 포인트가 없습니다.");
           }
         }
-
-        // 일반 상태에서 클릭
-        console.log("[handleMapClick] 일반 상태에서 클릭", event);
       };
 
-      // 이벤트 등록
       map.on("click", handleMapClick);
 
-      // Select 이벤트에서 상위 콜백 호출
       select.on("select", (e) => {
-        console.log("[Select interaction] select 이벤트", e);
         if (e.selected && e.selected.length > 0) {
           const objectId = e.selected[0].get("properties").objectId;
           if (typeof onFeatureSelect === "function") {
@@ -450,16 +366,9 @@ const MapTest = forwardRef(
         map.removeInteraction(select);
         map.removeInteraction(translate);
       };
-    }, [
-      currentTab,
-      gcpData,
-      handleMapPointAdded,
-      handleFeatureMoved,
-      handleFeatureDeleted,
-      onFeatureSelect,
-    ]);
+    }, []); // 컴포넌트 마운트 시 한 번만 실행
 
-    // gcpData가 변경될 때마다 레이어 업데이트
+    // 저장 버튼 클릭 시 데이터 업데이트
     useEffect(() => {
       if (gcpLayerRef.current && gcpData && Array.isArray(gcpData)) {
         const { source } = gcpLayerRef.current;
@@ -467,14 +376,26 @@ const MapTest = forwardRef(
         source.clear();
         source.addFeatures(features);
         pointFeaturesRef.current = features;
-        // 다음 objectId 계산
-        const maxObjectId = gcpData.reduce(
-          (max, item) => (item.objectId > max ? item.objectId : max),
-          0
-        );
-        nextObjectIdRef.current = maxObjectId + 1;
+        nextObjectIdRef.current =
+          gcpData.reduce(
+            (max, item) => (item.objectId > max ? item.objectId : max),
+            0
+          ) + 1;
       }
-    }, [gcpData]);
+    }, [gcpData]); // gcpData가 변경될 때만 실행 (저장 버튼 클릭 시)
+
+    // 탭 변경 시 선택 초기화
+    useEffect(() => {
+      if (selectInteractionRef.current) {
+        selectInteractionRef.current.getFeatures().clear();
+      }
+      if (typeof onFeatureSelect === "function") {
+        onFeatureSelect(null);
+      }
+      if (gcpGridRef.current) {
+        gcpGridRef.current.clearSelection();
+      }
+    }, [currentTab, onFeatureSelect]);
 
     // addPoint, updateFeature 메서드 구현
     useImperativeHandle(ref, () => ({

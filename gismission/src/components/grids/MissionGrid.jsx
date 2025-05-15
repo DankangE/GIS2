@@ -12,34 +12,29 @@ import { Button, Stack } from "@mui/material";
 // CSS 스타일 추가 - blue, orange-border, green-border, yellow-bg 클래스 정의
 const gridStyle = document.createElement("style");
 gridStyle.textContent = `
-    .selected-bg {
-      background-color: #e5f6ff !important;
-    }
-    .updated-bg {
-      background-color: #fff9c4 !important;
-    }
-    .created-bg {
-      background-color: #f0fff0 !important;
-    }
-  `;
+  .selected-bg {
+    background-color: #e5f6ff !important;
+  }
+  .updated-bg {
+    background-color: #fff9c4 !important;
+  }
+  .created-bg {
+    background-color: #f0fff0 !important;
+  }
+`;
 document.head.appendChild(gridStyle);
 
-const REQUIRED_FIELDS = [
-  { key: "name", label: "이름" },
-  { key: "lat", label: "위도" },
-  { key: "lon", label: "경도" },
-];
+const REQUIRED_FIELDS = [{ key: "name", label: "이름" }];
 
 /**
- * 지리좌표(GCP) 데이터를 표시하고 관리하는 그리드 컴포넌트
+ * 임무 지점 데이터를 표시하고 관리하는 그리드 컴포넌트
  */
-const LandingGrid = forwardRef(
+const MissionGrid = forwardRef(
   (
     {
-      landingData,
+      missionData,
       handleGridDataChange,
       handleGridSave,
-      handleRequestAddPoint,
       handleRowUpdate,
       handleDeleteRow: onDeleteRow,
       onRowFocus,
@@ -49,34 +44,68 @@ const LandingGrid = forwardRef(
     // 그리드에 표시될 데이터 상태
     const [data, setData] = useState([]);
     // 그리드 컴포넌트에 대한 참조
-    const [gridData, setGridData] = useState(landingData);
+    const [gridData, setGridData] = useState([]);
     const gridRef = useRef(null);
 
-    // gcpData가 변경될 때 gridData 업데이트
     useEffect(() => {
-      setGridData(landingData);
-    }, [landingData]);
+      if (missionData) {
+        console.log("GISMAP에서 missionData:", missionData);
+      }
+    }, [missionData]);
+
+    // missionData가 변경될 때 gridData 업데이트
+    useEffect(() => {
+      if (missionData && missionData.features) {
+        const formattedData = missionData.features.map((feature, idx) => ({
+          id: feature.objectId ?? idx,
+          name: feature.properties?.name ?? "",
+          note: feature.properties?.notes ?? "",
+          type: feature.geometry?.type ?? "",
+        }));
+        console.log("MissionGrid에서 formattedData:", formattedData);
+        console.log("MissionGrid에서 formattedData:", formattedData);
+        setGridData(formattedData);
+        setData(formattedData);
+      }
+    }, [missionData]);
 
     // gridData가 변경될 때 부모 컴포넌트에 알림
     useEffect(() => {
-      handleGridDataChange(gridData);
-    }, []);
+      if (gridData.length > 0) {
+        handleGridDataChange({
+          type: "FeatureCollection",
+          features: gridData.map((row) => ({
+            type: "Feature",
+            objectId: row.objectId,
+            properties: {
+              name: row.name,
+              notes: row.note,
+            },
+            geometry: {
+              type: row.type,
+              coordinates: row.coordinates,
+              radius: row.radius,
+            },
+          })),
+        });
+      }
+    }, [gridData]);
 
     // 초기 데이터 설정
     useEffect(() => {
-      if (gridRef.current && landingData) {
+      if (gridRef.current && gridData.length > 0) {
         const grid = gridRef.current.getInstance();
-        grid.resetData(landingData);
-        setData(landingData);
+        grid.resetData(gridData);
+        setData(gridData);
         setTimeout(() => {
-          if (gridRef.current && landingData.length > 0) {
+          if (gridRef.current && gridData.length > 0) {
             const grid = gridRef.current.getInstance();
             grid.focus(0, "name");
             handleFocusChange({ rowKey: 0 });
           }
         }, 100);
       }
-    }, [landingData]);
+    }, [gridData]);
 
     // 유효성 검사 함수
     const validateRows = (rows) => {
@@ -113,38 +142,17 @@ const LandingGrid = forwardRef(
     };
 
     /**
-     * 그리드 컬럼 정의 - 이름, 위도, 경도, 고도, 비고 표시
+     * 그리드 컬럼 정의 - 이름, 비고, 타입 표시
      */
     const columns = [
       {
         name: "name",
         header: "이름",
         width: 150,
-        editor: { type: "text", options: { placeholder: "*필수값입니다." } },
+        editor: "text",
         sortable: true,
       },
-      // 위도 컬럼
-      {
-        name: "lat",
-        header: "위도",
-        width: 120,
-        editor: {
-          type: "text",
-          options: { useViewMode: false, placeholder: "*필수값입니다." },
-        },
-        align: "right",
-      },
-      // 경도 컬럼
-      {
-        name: "lon",
-        header: "경도",
-        width: 120,
-        editor: {
-          type: "text",
-          options: { useViewMode: false, placeholder: "*필수값입니다." },
-        },
-        align: "right",
-      },
+      { name: "type", header: "타입", width: 120, editor: "text" },
       { name: "note", header: "비고", width: 570, editor: "text" },
     ];
 
@@ -187,10 +195,10 @@ const LandingGrid = forwardRef(
         {
           objectId: newId,
           name: "",
-          lat: "",
-          lon: "",
-          rel_alt: "",
+          type: "",
           note: "",
+          coordinates: [],
+          radius: null,
         },
         { focus: true }
       );
@@ -258,14 +266,6 @@ const LandingGrid = forwardRef(
       const allData = grid.getData();
       if (!validateRows(allData)) return;
 
-      // 위도, 경도, 고도를 Number로 변환
-      const processedData = allData.map((item) => ({
-        ...item,
-        lat: Number(item.lat),
-        lon: Number(item.lon),
-        rel_alt: Number(item.rel_alt),
-      }));
-
       const modifiedRows = grid.getModifiedRows();
       console.log("수정된 행:", modifiedRows.updatedRows);
       console.log("추가된 행:", modifiedRows.createdRows);
@@ -274,26 +274,25 @@ const LandingGrid = forwardRef(
 
       // 저장 전에 모든 선택 배경색 초기화
       clearAllSelectedBg();
-      handleGridSave(processedData);
+      handleGridSave({
+        type: "FeatureCollection",
+        features: allData.map((row) => ({
+          type: "Feature",
+          objectId: row.objectId,
+          properties: {
+            name: row.name,
+            notes: row.note,
+          },
+          geometry: {
+            type: row.type,
+            coordinates: row.coordinates,
+            radius: row.radius,
+          },
+        })),
+      });
     };
 
-    // 저장 후 데이터 재조회
-    useEffect(() => {
-      if (gridRef.current && landingData) {
-        const grid = gridRef.current.getInstance();
-        grid.resetData(landingData);
-        setData(landingData);
-        setTimeout(() => {
-          if (gridRef.current && landingData.length > 0) {
-            const grid = gridRef.current.getInstance();
-            grid.focus(0, "name");
-            handleFocusChange({ rowKey: 0 });
-          }
-        }, 100);
-      }
-    }, [landingData]);
-
-    // 셀 변경 시 변경 표시 갱신 및 포인트 추가 요청, 그리고 row 업데이트 콜백 호출
+    // 셀 변경 시 변경 표시 갱신 및 row 업데이트 콜백 호출
     const handleAfterChange = (ev) => {
       markModifiedRowsAndCells();
       console.log("handleAfterChange 호출", ev);
@@ -308,32 +307,16 @@ const LandingGrid = forwardRef(
           const columnName = change.columnName;
           const row = allData.find((r) => r.rowKey === rowKey);
 
-          // name, lat, lon 컬럼이 변경된 경우 map에 업데이트 요청
+          // name 컬럼이 변경된 경우 map에 업데이트 요청
           if (
             row &&
             typeof handleRowUpdate === "function" &&
-            (columnName === "name" ||
-              columnName === "lat" ||
-              columnName === "lon")
+            columnName === "name"
           ) {
             handleRowUpdate(row);
           }
         });
       }
-
-      // 기존 포인트 추가 요청 로직
-      allData.forEach((row) => {
-        if (
-          row.objectId !== undefined &&
-          row.lat &&
-          row.lon &&
-          !isNaN(Number(row.lat)) &&
-          !isNaN(Number(row.lon)) &&
-          typeof handleRequestAddPoint === "function"
-        ) {
-          handleRequestAddPoint(row);
-        }
-      });
     };
 
     // 외부에서 호출 가능한 addRowFromMap 메서드
@@ -343,20 +326,14 @@ const LandingGrid = forwardRef(
         const grid = gridRef.current.getInstance();
         // 이미 해당 objectId의 행이 있으면 추가하지 않음
         const exists = grid.getData().some((r) => r.objectId === row.objectId);
-        if (
-          !exists &&
-          row.lat &&
-          row.lon &&
-          !isNaN(Number(row.lat)) &&
-          !isNaN(Number(row.lon))
-        ) {
+        if (!exists) {
           grid.appendRow({
             objectId: row.objectId,
-            name: "",
-            lat: row.lat,
-            lon: row.lon,
-            rel_alt: "",
-            note: "",
+            name: row.properties.name,
+            type: row.geometry.type,
+            note: row.properties.notes,
+            coordinates: row.geometry.coordinates,
+            radius: row.geometry.radius,
           });
         }
       },
@@ -366,9 +343,11 @@ const LandingGrid = forwardRef(
         const allData = grid.getData();
         const idx = allData.findIndex((r) => r.objectId === row.objectId);
         if (idx !== -1) {
-          // lat/lon만 갱신
-          grid.setValue(idx, "lat", row.lat);
-          grid.setValue(idx, "lon", row.lon);
+          grid.setValue(idx, "name", row.properties.name);
+          grid.setValue(idx, "note", row.properties.notes);
+          grid.setValue(idx, "type", row.geometry.type);
+          grid.setValue(idx, "coordinates", row.geometry.coordinates);
+          grid.setValue(idx, "radius", row.geometry.radius);
         }
       },
       deleteRowFromMap: (objectId) => {
@@ -392,6 +371,14 @@ const LandingGrid = forwardRef(
         }
       },
       clearAllSelectedBg: () => {
+        if (!gridRef.current) return;
+        const grid = gridRef.current.getInstance();
+        const allData = grid.getData();
+        allData.forEach((row) => {
+          grid.removeRowClassName(row.rowKey, "selected-bg");
+        });
+      },
+      clearSelection: () => {
         if (!gridRef.current) return;
         const grid = gridRef.current.getInstance();
         const allData = grid.getData();
@@ -442,4 +429,4 @@ const LandingGrid = forwardRef(
   }
 );
 
-export default LandingGrid;
+export default MissionGrid;
