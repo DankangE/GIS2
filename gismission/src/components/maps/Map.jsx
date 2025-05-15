@@ -22,6 +22,22 @@ import { Select, Translate } from "ol/interaction";
 import { click } from "ol/events/condition";
 import "ol/ol.css";
 import { Style, Circle, Fill, Stroke, Text } from "ol/style";
+import VectorLayer from "ol/layer/Vector";
+import VectorSource from "ol/source/Vector";
+import Draw from "ol/interaction/Draw";
+import Snap from "ol/interaction/Snap";
+import MissionButton from "../../components/buttons/MissionButton.jsx";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
+import Radio from "@mui/material/Radio";
+import RadioGroup from "@mui/material/RadioGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Feature from "ol/Feature";
+import Point from "ol/geom/Point";
+import Modify from "ol/interaction/Modify";
 
 // 상수 정의
 // 초기 설정
@@ -85,6 +101,20 @@ const MapTest = forwardRef(
     const selectInteractionRef = useRef(null);
     const translateInteractionRef = useRef(null);
     const gcpGridRef = useRef(null);
+    const polygonLayerRef = useRef(null);
+    const polygonSourceRef = useRef(null);
+    const drawInteractionRef = useRef(null);
+    const snapInteractionRef = useRef(null);
+    const vertexLayerRef = useRef(null);
+    const vertexSourceRef = useRef(null);
+    const modifyInteractionRef = useRef(null);
+    const [missionModalOpen, setMissionModalOpen] = React.useState(false);
+    const [drawType, setDrawType] = React.useState("Polygon");
+    const [selectedFeatureId, setSelectedFeatureId] = React.useState(null);
+
+    const handleMissionButtonClick = () => setMissionModalOpen(true);
+    const handleMissionModalClose = () => setMissionModalOpen(false);
+    const handleDrawTypeChange = (e) => setDrawType(e.target.value);
 
     // 현재 탭에 맞는 레이어 반환
     const getCurrentLayer = useCallback(() => {
@@ -263,6 +293,36 @@ const MapTest = forwardRef(
 
       selectInteractionRef.current = select;
       translateInteractionRef.current = translate;
+
+      // 폴리곤 레이어 및 인터랙션 생성 (초기화만, 지도에는 추가하지 않음)
+      const polygonSource = new VectorSource();
+      const polygonLayer = new VectorLayer({ source: polygonSource });
+      polygonLayer.setZIndex(100); // 오브젝트 위에 보이도록
+      polygonLayerRef.current = polygonLayer;
+      polygonSourceRef.current = polygonSource;
+      const draw = new Draw({ source: polygonSource, type: "Polygon" });
+      const snap = new Snap({ source: polygonSource });
+      drawInteractionRef.current = draw;
+      snapInteractionRef.current = snap;
+
+      // --- 꼭짓점 마커용 vertexLayer 추가 ---
+      const vertexSource = new VectorSource();
+      const vertexLayer = new VectorLayer({
+        source: vertexSource,
+        style: new Style({
+          image: new Circle({
+            radius: 6,
+            fill: new Fill({ color: "white" }),
+            stroke: new Stroke({ color: "#1976d2", width: 2 }),
+          }),
+        }),
+      });
+      vertexLayer.setZIndex(200);
+      vertexLayerRef.current = vertexLayer;
+      vertexSourceRef.current = vertexSource;
+      map.addLayer(vertexLayer);
+      // --- 꼭짓점 마커용 vertexLayer 추가 끝 ---
+
       mapRef.current = map;
 
       if (gcpData && Array.isArray(gcpData)) {
@@ -365,8 +425,12 @@ const MapTest = forwardRef(
         map.un("click", handleMapClick);
         map.removeInteraction(select);
         map.removeInteraction(translate);
+        // 폴리곤 관련 정리
+        map.removeLayer(polygonLayer);
+        map.removeInteraction(draw);
+        map.removeInteraction(snap);
       };
-    }, []); // 컴포넌트 마운트 시 한 번만 실행
+    }, []); // 최초 1회만
 
     // 저장 버튼 클릭 시 데이터 업데이트
     useEffect(() => {
@@ -396,6 +460,90 @@ const MapTest = forwardRef(
         gcpGridRef.current.clearSelection();
       }
     }, [currentTab, onFeatureSelect]);
+
+    // 탭 변경 시 폴리곤/오브젝트 레이어 on/off
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      const polygonLayer = polygonLayerRef.current;
+      // GCP/이착륙 레이어
+      const gcpLayer = gcpLayerRef.current?.layer;
+      const landingLayer = landingLayerRef.current?.layer;
+      // 임무탭이면 폴리곤만 보이게
+      if (currentTab === 2) {
+        if (gcpLayer) map.removeLayer(gcpLayer);
+        if (landingLayer) map.removeLayer(landingLayer);
+        if (
+          polygonLayer &&
+          !map.getLayers().getArray().includes(polygonLayer)
+        ) {
+          map.addLayer(polygonLayer);
+        }
+        // draw/snap 인터랙션은 startMissionDraw에서만 추가
+      } else {
+        // GCP/이착륙 레이어 복구
+        if (gcpLayer && !map.getLayers().getArray().includes(gcpLayer)) {
+          map.getLayers().insertAt(1, gcpLayer);
+        }
+        if (
+          landingLayer &&
+          !map.getLayers().getArray().includes(landingLayer)
+        ) {
+          map.getLayers().insertAt(2, landingLayer);
+        }
+        // 폴리곤/인터랙션 제거
+        if (polygonLayer && map.getLayers().getArray().includes(polygonLayer)) {
+          map.removeLayer(polygonLayer);
+        }
+        // draw/snap 인터랙션 제거
+        if (
+          drawInteractionRef.current &&
+          map.getInteractions().getArray().includes(drawInteractionRef.current)
+        ) {
+          map.removeInteraction(drawInteractionRef.current);
+        }
+        if (
+          snapInteractionRef.current &&
+          map.getInteractions().getArray().includes(snapInteractionRef.current)
+        ) {
+          map.removeInteraction(snapInteractionRef.current);
+        }
+      }
+    }, [currentTab]);
+
+    // 임무탭 드로우 시작
+    const startMissionDraw = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      const polygonSource = polygonSourceRef.current;
+      // 기존 draw/snap 제거
+      if (drawInteractionRef.current)
+        map.removeInteraction(drawInteractionRef.current);
+      if (snapInteractionRef.current)
+        map.removeInteraction(snapInteractionRef.current);
+      // 새 draw 생성 (기존 Feature 개수와 상관없이)
+      const draw = new Draw({
+        source: polygonSource,
+        type: drawType, // "Point", "LineString", "Circle", "Polygon"
+      });
+      drawInteractionRef.current = draw;
+      map.addInteraction(draw);
+      // snap도 새로
+      const snap = new Snap({ source: polygonSource });
+      snapInteractionRef.current = snap;
+      map.addInteraction(snap);
+      // 하나 그려지면 draw 인터랙션만 제거, Feature는 남김
+      draw.on("drawend", () => {
+        setTimeout(() => {
+          map.removeInteraction(draw);
+          map.removeInteraction(snap);
+        }, 100);
+      });
+    };
+    const handleMissionModalConfirm = () => {
+      setMissionModalOpen(false);
+      startMissionDraw();
+    };
 
     // addPoint, updateFeature 메서드 구현
     useImperativeHandle(ref, () => ({
@@ -526,6 +674,121 @@ const MapTest = forwardRef(
       },
     }));
 
+    // Feature 클릭 시 선택된 Feature만 꼭짓점 마커 표시
+    useEffect(() => {
+      const polygonSource = polygonSourceRef.current;
+      const map = mapRef.current;
+      if (!polygonSource || !map) return;
+
+      const handleFeatureClick = (evt) => {
+        map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+          if (polygonSource.getFeatures().includes(feature)) {
+            setSelectedFeatureId(
+              feature.ol_uid || feature.getId() || feature.uid
+            );
+            return true;
+          }
+          return false;
+        });
+      };
+      map.on("click", handleFeatureClick);
+      return () => {
+        map.un("click", handleFeatureClick);
+      };
+    }, []);
+
+    // 꼭짓점 마커 동기화 함수 (선택된 Feature만, 원은 제외)
+    function updateVertexMarkers() {
+      const vertexSource = vertexSourceRef.current;
+      const polygonSource = polygonSourceRef.current;
+      if (!vertexSource || !polygonSource) return;
+      vertexSource.clear();
+      if (!selectedFeatureId) return;
+      const feature = polygonSource
+        .getFeatures()
+        .find((f) => (f.ol_uid || f.getId() || f.uid) === selectedFeatureId);
+      if (!feature) return;
+      const geom = feature.getGeometry();
+      if (!geom) return;
+      let coordsArr = [];
+      if (geom.getType() === "Point") {
+        coordsArr = [geom.getCoordinates()];
+      } else if (geom.getType() === "LineString") {
+        coordsArr = geom.getCoordinates();
+      } else if (geom.getType() === "Polygon") {
+        coordsArr = geom.getCoordinates()[0] || [];
+      }
+      if (!Array.isArray(coordsArr[0])) coordsArr = [coordsArr];
+      coordsArr.forEach((coord) => {
+        if (Array.isArray(coord) && typeof coord[0] === "number") {
+          vertexSource.addFeature(new Feature(new Point(coord)));
+        }
+      });
+    }
+
+    // selectedFeatureId가 바뀔 때마다 꼭짓점 마커 동기화
+    useEffect(() => {
+      updateVertexMarkers();
+    }, [selectedFeatureId]);
+
+    // polygonSource Feature 변경 시 vertex 동기화 (polygonSource 준비 후에만)
+    useEffect(() => {
+      const polygonSource = polygonSourceRef.current;
+      if (!polygonSource) return;
+      const update = () => updateVertexMarkers();
+      polygonSource.on("addfeature", update);
+      polygonSource.on("changefeature", update);
+      polygonSource.on("removefeature", update);
+      // 최초 1회 동기화
+      updateVertexMarkers();
+      return () => {
+        polygonSource.un("addfeature", update);
+        polygonSource.un("changefeature", update);
+        polygonSource.un("removefeature", update);
+      };
+    }, []);
+
+    // Shift 키로만 수정 가능하게 (임무탭에서만)
+    useEffect(() => {
+      if (currentTab !== 2) return;
+      const map = mapRef.current;
+      const polygonSource = polygonSourceRef.current;
+      if (!map || !polygonSource) return;
+
+      const handleKeyDown = (e) => {
+        if (e.key === "Shift" && !modifyInteractionRef.current) {
+          const modify = new Modify({
+            source: polygonSource,
+            style: new Style({
+              image: new Circle({
+                radius: 7,
+                fill: new Fill({ color: "#1976d2" }),
+                stroke: new Stroke({ color: "#1976d2", width: 2 }),
+              }),
+            }),
+          });
+          map.addInteraction(modify);
+          modifyInteractionRef.current = modify;
+        }
+      };
+      const handleKeyUp = (e) => {
+        if (e.key === "Shift" && modifyInteractionRef.current) {
+          map.removeInteraction(modifyInteractionRef.current);
+          modifyInteractionRef.current = null;
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
+        if (modifyInteractionRef.current) {
+          map.removeInteraction(modifyInteractionRef.current);
+          modifyInteractionRef.current = null;
+        }
+      };
+    }, [currentTab]);
+
     return (
       <div
         className="gis-map-wrap"
@@ -544,6 +807,49 @@ const MapTest = forwardRef(
             <AddButton onToggleAddingMode={handleToggleAddingMode} />
             <DeleteButton onToggleDeletingMode={handleToggleDeletingMode} />
             <MoveButton onToggleMovingMode={handleToggleMovingMode} />
+          </>
+        )}
+        {/* 임무탭: MissionButton + 모달 */}
+        {currentTab === 2 && (
+          <>
+            <div
+              style={{ position: "absolute", top: 16, left: 16, zIndex: 200 }}
+            >
+              <MissionButton onClick={handleMissionButtonClick} />
+            </div>
+            <Dialog open={missionModalOpen} onClose={handleMissionModalClose}>
+              <DialogTitle>드로우 타입 선택</DialogTitle>
+              <DialogContent>
+                <RadioGroup value={drawType} onChange={handleDrawTypeChange}>
+                  <FormControlLabel
+                    value="Point"
+                    control={<Radio />}
+                    label="점"
+                  />
+                  <FormControlLabel
+                    value="LineString"
+                    control={<Radio />}
+                    label="선"
+                  />
+                  <FormControlLabel
+                    value="Circle"
+                    control={<Radio />}
+                    label="원"
+                  />
+                  <FormControlLabel
+                    value="Polygon"
+                    control={<Radio />}
+                    label="면"
+                  />
+                </RadioGroup>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={handleMissionModalClose}>취소</Button>
+                <Button onClick={handleMissionModalConfirm} variant="contained">
+                  확인
+                </Button>
+              </DialogActions>
+            </Dialog>
           </>
         )}
         {/* TODO: 다른 탭의 버튼들 추가 */}
