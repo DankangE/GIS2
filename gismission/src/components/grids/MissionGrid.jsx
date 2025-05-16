@@ -57,12 +57,17 @@ const MissionGrid = forwardRef(
     useEffect(() => {
       if (missionData && missionData.features) {
         const formattedData = missionData.features.map((feature, idx) => ({
-          id: feature.objectId ?? idx,
-          name: feature.properties?.name ?? "",
-          note: feature.properties?.notes ?? "",
           type: feature.geometry?.type ?? "",
+          id: feature.objectId ?? idx,
+          objectId: feature.objectId ?? idx + 1,
+          name: feature.properties?.name ?? "",
+          geometry: `${feature.geometry?.type ?? ""}: ${
+            JSON.stringify(feature.geometry?.coordinates) ?? "[]"
+          }`,
+          coordinates: JSON.stringify(feature.geometry?.coordinates) ?? "[]",
+          notes: feature.properties?.notes ?? "",
+          radius: feature.geometry?.radius ?? null,
         }));
-        console.log("MissionGrid에서 formattedData:", formattedData);
         console.log("MissionGrid에서 formattedData:", formattedData);
         setGridData(formattedData);
         setData(formattedData);
@@ -79,17 +84,27 @@ const MissionGrid = forwardRef(
             objectId: row.objectId,
             properties: {
               name: row.name,
-              notes: row.note,
+              notes: row.notes,
             },
             geometry: {
               type: row.type,
-              coordinates: row.coordinates,
+              coordinates: tryParseJSON(row.coordinates) || [],
               radius: row.radius,
             },
           })),
         });
       }
     }, [gridData]);
+
+    // JSON 문자열을 객체로 변환 (실패 시 null 반환)
+    const tryParseJSON = (jsonString) => {
+      try {
+        return JSON.parse(jsonString);
+      } catch (e) {
+        console.error("JSON 파싱 오류:", e);
+        return null;
+      }
+    };
 
     // 초기 데이터 설정
     useEffect(() => {
@@ -110,6 +125,7 @@ const MissionGrid = forwardRef(
     // 유효성 검사 함수
     const validateRows = (rows) => {
       for (const row of rows) {
+        // 필수 필드 검사
         for (const field of REQUIRED_FIELDS) {
           if (!row[field.key] || row[field.key].toString().trim() === "") {
             alert(
@@ -119,6 +135,39 @@ const MissionGrid = forwardRef(
             );
             if (gridRef.current) {
               gridRef.current.getInstance().focus(row.rowKey, field.key);
+            }
+            return false;
+          }
+        }
+
+        // 좌표 JSON 형식 검사
+        if (row.coordinates) {
+          try {
+            const coordsObj = JSON.parse(row.coordinates);
+            // 타입에 따른 좌표 형식 검증
+            if (row.type === "Point" && !Array.isArray(coordsObj)) {
+              throw new Error("Point 좌표는 배열 형식이어야 합니다");
+            } else if (
+              row.type === "LineString" &&
+              (!Array.isArray(coordsObj) || !Array.isArray(coordsObj[0]))
+            ) {
+              throw new Error("LineString 좌표는 2차원 배열 형식이어야 합니다");
+            } else if (
+              row.type === "Polygon" &&
+              (!Array.isArray(coordsObj) ||
+                !Array.isArray(coordsObj[0]) ||
+                !Array.isArray(coordsObj[0][0]))
+            ) {
+              throw new Error("Polygon 좌표는 3차원 배열 형식이어야 합니다");
+            }
+          } catch (e) {
+            alert(
+              `좌표 형식이 올바르지 않습니다. 행: ${
+                row._attributes ? row._attributes.rowNum : ""
+              }\n오류: ${e.message}`
+            );
+            if (gridRef.current) {
+              gridRef.current.getInstance().focus(row.rowKey, "coordinates");
             }
             return false;
           }
@@ -142,7 +191,7 @@ const MissionGrid = forwardRef(
     };
 
     /**
-     * 그리드 컬럼 정의 - 이름, 비고, 타입 표시
+     * 그리드 컬럼 정의 - 이름, geometry, 비고 표시
      */
     const columns = [
       {
@@ -152,8 +201,19 @@ const MissionGrid = forwardRef(
         editor: "text",
         sortable: true,
       },
-      { name: "type", header: "타입", width: 120, editor: "text" },
-      { name: "note", header: "비고", width: 570, editor: "text" },
+      {
+        name: "geometry",
+        header: "Geometry",
+        width: 420,
+        formatter: ({ row }) => {
+          if (!row) return "";
+          const type = row.type || "";
+          const coordinates = row.coordinates || "[]";
+          return `${type}: ${coordinates}`;
+        },
+        editor: "text",
+      },
+      { name: "notes", header: "비고", width: 250, editor: "text" },
     ];
 
     // 포커스 행 스타일 처리
@@ -181,28 +241,6 @@ const MissionGrid = forwardRef(
           onRowFocus(rowKey, rowData.objectId);
         }
       }
-    };
-
-    // 행 추가
-    const handleAddRow = () => {
-      if (!gridRef.current) return;
-      const grid = gridRef.current.getInstance();
-      const gridData = grid.getData();
-      const lastRow =
-        gridData.length > 0 ? gridData[gridData.length - 1] : null;
-      const newId = lastRow && lastRow.objectId ? lastRow.objectId + 1 : 1;
-      grid.appendRow(
-        {
-          objectId: newId,
-          name: "",
-          type: "",
-          note: "",
-          coordinates: [],
-          radius: null,
-        },
-        { focus: true }
-      );
-      setTimeout(markModifiedRowsAndCells, 50);
     };
 
     // 행 삭제
@@ -270,7 +308,6 @@ const MissionGrid = forwardRef(
       console.log("수정된 행:", modifiedRows.updatedRows);
       console.log("추가된 행:", modifiedRows.createdRows);
       console.log("삭제된 행:", modifiedRows.deletedRows);
-      alert("변경된 데이터가 콘솔에 출력되었습니다.");
 
       // 저장 전에 모든 선택 배경색 초기화
       clearAllSelectedBg();
@@ -281,11 +318,11 @@ const MissionGrid = forwardRef(
           objectId: row.objectId,
           properties: {
             name: row.name,
-            notes: row.note,
+            notes: row.notes,
           },
           geometry: {
             type: row.type,
-            coordinates: row.coordinates,
+            coordinates: tryParseJSON(row.coordinates) || [],
             radius: row.radius,
           },
         })),
@@ -307,13 +344,38 @@ const MissionGrid = forwardRef(
           const columnName = change.columnName;
           const row = allData.find((r) => r.rowKey === rowKey);
 
-          // name 컬럼이 변경된 경우 map에 업데이트 요청
+          // name, notes 또는 coordinates 컬럼이 변경된 경우 map에 업데이트 요청
           if (
             row &&
             typeof handleRowUpdate === "function" &&
-            columnName === "name"
+            (columnName === "name" ||
+              columnName === "notes" ||
+              columnName === "coordinates")
           ) {
-            handleRowUpdate(row);
+            // coordinates는 JSON 파싱 시도
+            if (columnName === "coordinates") {
+              try {
+                JSON.parse(row.coordinates); // 유효한 JSON인지 검증
+              } catch (e) {
+                console.error("좌표 형식이 잘못되었습니다:", e);
+                // 에러 처리 로직 (예: 알림 표시)
+                return;
+              }
+            }
+
+            // 맵에 업데이트
+            handleRowUpdate({
+              ...row,
+              geometry: {
+                type: row.type,
+                coordinates: tryParseJSON(row.coordinates) || [],
+                radius: row.radius,
+              },
+              properties: {
+                name: row.name,
+                notes: row.notes,
+              },
+            });
           }
         });
       }
@@ -329,11 +391,11 @@ const MissionGrid = forwardRef(
         if (!exists) {
           grid.appendRow({
             objectId: row.objectId,
-            name: row.properties.name,
-            type: row.geometry.type,
-            note: row.properties.notes,
-            coordinates: row.geometry.coordinates,
-            radius: row.geometry.radius,
+            name: row.properties?.name || "",
+            type: row.geometry?.type || "",
+            coordinates: JSON.stringify(row.geometry?.coordinates || []),
+            notes: row.properties?.notes || "",
+            radius: row.geometry?.radius || null,
           });
         }
       },
@@ -343,11 +405,22 @@ const MissionGrid = forwardRef(
         const allData = grid.getData();
         const idx = allData.findIndex((r) => r.objectId === row.objectId);
         if (idx !== -1) {
-          grid.setValue(idx, "name", row.properties.name);
-          grid.setValue(idx, "note", row.properties.notes);
-          grid.setValue(idx, "type", row.geometry.type);
-          grid.setValue(idx, "coordinates", row.geometry.coordinates);
-          grid.setValue(idx, "radius", row.geometry.radius);
+          grid.setValue(idx, "name", row.properties?.name || "");
+          grid.setValue(idx, "notes", row.properties?.notes || "");
+          grid.setValue(idx, "type", row.geometry?.type || "");
+          grid.setValue(
+            idx,
+            "geometry",
+            `${row.geometry?.type || ""}: ${JSON.stringify(
+              row.geometry?.coordinates || []
+            )}`
+          );
+          grid.setValue(
+            idx,
+            "coordinates",
+            JSON.stringify(row.geometry?.coordinates || [])
+          );
+          grid.setValue(idx, "radius", row.geometry?.radius || null);
         }
       },
       deleteRowFromMap: (objectId) => {
@@ -398,9 +471,6 @@ const MissionGrid = forwardRef(
         }}
       >
         <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-          <Button variant="contained" onClick={handleAddRow}>
-            행 추가
-          </Button>
           <Button variant="contained" onClick={handleDeleteRow}>
             행 삭제
           </Button>

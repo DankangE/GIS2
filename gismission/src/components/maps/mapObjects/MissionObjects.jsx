@@ -1,105 +1,64 @@
-import React, { useState, useEffect } from "react";
-import { Map } from "ol";
-import Draw from "ol/interaction/Draw";
-import VectorSource from "ol/source/Vector";
-import VectorLayer from "ol/layer/Vector";
-import { Modal, Button, Select } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { useEffect } from "react";
+import Feature from "ol/Feature";
+import { Point, LineString, Polygon, Circle as OlCircle } from "ol/geom";
 
-const { Option } = Select;
-
-const MissionObjects = ({ map, isActive }) => {
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedType, setSelectedType] = useState(null);
-  const [drawInteraction, setDrawInteraction] = useState(null);
-
-  // 벡터 소스와 레이어 생성
-  const vectorSource = new VectorSource();
-  const vectorLayer = new VectorLayer({
-    source: vectorSource,
-    visible: false, // 초기에는 숨김
-  });
-
+const MissionObjects = ({ map, isActive, missionData, polygonSource }) => {
   useEffect(() => {
-    if (map) {
-      map.addLayer(vectorLayer);
+    if (missionData && missionData.features && isActive && polygonSource) {
+      missionData.features.forEach((feature) => {
+        let geometry;
+        const coordinates = feature.geometry?.coordinates;
+        if (!coordinates) return;
+        switch (feature.geometry.type) {
+          case "Point":
+            geometry = new Point(coordinates);
+            break;
+          case "LineString":
+            geometry = new LineString(coordinates);
+            break;
+          case "Polygon":
+            geometry = new Polygon(coordinates);
+            break;
+          case "Circle":
+            geometry = new OlCircle(
+              coordinates,
+              feature.geometry.radius || 1000
+            );
+            break;
+          default:
+            return;
+        }
+
+        const existingFeatures = polygonSource.getFeatures();
+        const isDuplicate = existingFeatures.some((f) => {
+          const geom = f.getGeometry();
+          if (!geom || geom.getType() !== geometry.getType()) return false;
+
+          try {
+            const coords1 = JSON.stringify(geom.getCoordinates());
+            const coords2 = JSON.stringify(geometry.getCoordinates());
+            return coords1 === coords2;
+          } catch (e) {
+            return false;
+          }
+        });
+
+        if (!isDuplicate) {
+          const olFeature = new Feature({ geometry });
+          if (feature.properties) {
+            olFeature.setProperties({ properties: feature.properties });
+          }
+          olFeature.set(
+            "objectId",
+            feature.objectId || `feature_${Date.now()}_${Math.random()}`
+          );
+          polygonSource.addFeature(olFeature);
+        }
+      });
     }
-  }, [map]);
+  }, [missionData, isActive, polygonSource]);
 
-  // 탭 활성화 상태에 따라 레이어 표시/숨김 처리
-  useEffect(() => {
-    if (vectorLayer) {
-      vectorLayer.setVisible(isActive);
-
-      // 탭이 비활성화되면 그리기 인터랙션 제거
-      if (!isActive && drawInteraction) {
-        map.removeInteraction(drawInteraction);
-        setDrawInteraction(null);
-      }
-    }
-  }, [isActive, map, drawInteraction]);
-
-  const handleAddClick = () => {
-    setIsModalVisible(true);
-  };
-
-  const handleTypeSelect = (value) => {
-    setSelectedType(value);
-    setIsModalVisible(false);
-    startDrawing(value);
-  };
-
-  const startDrawing = (type) => {
-    // 기존 draw interaction 제거
-    if (drawInteraction) {
-      map.removeInteraction(drawInteraction);
-    }
-
-    // 새로운 draw interaction 생성
-    const draw = new Draw({
-      source: vectorSource,
-      type: type,
-    });
-
-    map.addInteraction(draw);
-    setDrawInteraction(draw);
-  };
-
-  // 탭이 비활성화된 경우 컴포넌트를 렌더링하지 않음
-  if (!isActive) {
-    return null;
-  }
-
-  return (
-    <div>
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        onClick={handleAddClick}
-        style={{ margin: "10px" }}
-      >
-        추가
-      </Button>
-
-      <Modal
-        title="객체 타입 선택"
-        open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        footer={null}
-      >
-        <Select
-          style={{ width: "100%" }}
-          placeholder="객체 타입을 선택하세요"
-          onChange={handleTypeSelect}
-        >
-          <Option value="Point">점</Option>
-          <Option value="LineString">선</Option>
-          <Option value="Circle">원</Option>
-          <Option value="Polygon">폴리곤</Option>
-        </Select>
-      </Modal>
-    </div>
-  );
+  return null;
 };
 
 export default MissionObjects;

@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useImperativeHandle,
   forwardRef,
+  useState,
 } from "react";
 import { Map as OlMap, View } from "ol";
 import { defaults as defaultControls } from "ol/control";
@@ -15,13 +16,14 @@ import {
   createPointFeature,
 } from "./mapObjects/GCPObjects.jsx";
 import { createLandingPointsLayer } from "./mapObjects/LandingObjects.jsx";
+import MissionObjects from "./mapObjects/MissionObjects.jsx";
 import AddButton from "../../components/buttons/AddButton.jsx";
 import DeleteButton from "../../components/buttons/DeleteButton.jsx";
 import MoveButton from "../../components/buttons/MoveButton.jsx";
 import { Select, Translate } from "ol/interaction";
-import { click } from "ol/events/condition";
+import { click, shiftKeyOnly } from "ol/events/condition";
 import "ol/ol.css";
-import { Style, Circle, Fill, Stroke, Text } from "ol/style";
+import { Style, Circle, Fill, Stroke, Text, Icon } from "ol/style";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import Draw from "ol/interaction/Draw";
@@ -38,6 +40,10 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
 import Modify from "ol/interaction/Modify";
+import GeoJSON from "ol/format/GeoJSON";
+import { getCenter as getExtentCenter } from "ol/extent";
+import TransformInteraction from "ol-ext/interaction/Transform";
+import "ol-ext/dist/ol-ext.css";
 
 // 상수 정의
 // 초기 설정
@@ -84,10 +90,10 @@ const MapTest = forwardRef(
       handleFeatureDeleted,
       currentTab,
       onFeatureSelect,
+      onMissionFeatureAdded,
     },
     ref
   ) => {
-    console.log("MapTest 컴포넌트 렌더링");
     const mapContent = useRef(null);
     const mapRef = useRef(null);
     const gcpLayerRef = useRef(null);
@@ -111,6 +117,7 @@ const MapTest = forwardRef(
     const [missionModalOpen, setMissionModalOpen] = React.useState(false);
     const [drawType, setDrawType] = React.useState("Polygon");
     const [selectedFeatureId, setSelectedFeatureId] = React.useState(null);
+    const [missionData, setMissionData] = useState(null);
 
     const handleMissionButtonClick = () => setMissionModalOpen(true);
     const handleMissionModalClose = () => setMissionModalOpen(false);
@@ -533,17 +540,74 @@ const MapTest = forwardRef(
       snapInteractionRef.current = snap;
       map.addInteraction(snap);
       // 하나 그려지면 draw 인터랙션만 제거, Feature는 남김
-      draw.on("drawend", () => {
+      draw.on("drawend", (event) => {
         setTimeout(() => {
           map.removeInteraction(draw);
           map.removeInteraction(snap);
         }, 100);
+
+        // 기존 콘솔 출력
+        const feature = event.feature;
+        const geometry = feature.getGeometry();
+
+        // 다음 objectId 계산
+        // missionData의 배열 수에 맞게 nextId를 설정
+        const nextId =
+          missionData && Array.isArray(missionData.features)
+            ? missionData.features.length + 1
+            : 1;
+
+        // GeoJSON 객체로 변환
+        const geojsonFormat = new GeoJSON();
+        const geojsonObj = geojsonFormat.writeFeatureObject(feature);
+
+        // GeoJSON 객체 수정
+        geojsonObj.objectId = "feature" + nextId;
+        geojsonObj.properties = {
+          name: "",
+          notes: "",
+        };
+
+        // 원본 feature에도 같은 속성 설정
+        feature.set("objectId", "feature" + nextId);
+        feature.set("name", "");
+        feature.set("notes", "");
+
+        // 임무 그리드에 행 추가 이벤트 발생 (부모 컴포넌트에서 처리)
+        if (typeof onMissionFeatureAdded === "function" && currentTab === 2) {
+          onMissionFeatureAdded({
+            objectId: "feature" + nextId,
+            type: geometry.getType(),
+            properties: {
+              name: "",
+              notes: "",
+            },
+            geometry: {
+              type: geometry.getType(),
+              coordinates: geometry.getCoordinates(),
+              radius:
+                geometry.getType() === "Circle" ? geometry.getRadius() : null,
+            },
+          });
+        }
       });
     };
     const handleMissionModalConfirm = () => {
       setMissionModalOpen(false);
       startMissionDraw();
     };
+
+    // missionData.json fetch면
+    useEffect(() => {
+      fetch("/jsondatas/missionData.json")
+        .then((res) => res.json())
+        .then((data) => {
+          setMissionData(data);
+        })
+        .catch((err) => {
+          console.error("missionData.json load error:", err);
+        });
+    }, []);
 
     // addPoint, updateFeature 메서드 구현
     useImperativeHandle(ref, () => ({
@@ -619,10 +683,107 @@ const MapTest = forwardRef(
         }
       },
       highlightFeatureAndPan: (objectId) => {
-        if (!gcpLayerRef.current || !mapRef.current || !objectId) return;
+        if (!objectId) return;
+
+        // 임무탭이면 polygonSource에서 찾기
+        if (currentTab === 2 && polygonSourceRef.current) {
+          const features = polygonSourceRef.current.getFeatures();
+
+          // 모든 feature 스타일 초기화
+          features.forEach((feature) => {
+            feature.setStyle(null);
+            feature.changed();
+          });
+
+          // objectId로 feature 찾기 (문자열 변환 비교)
+          const feature = features.find((f) => {
+            const fid = f.get("objectId");
+            const isEqual = String(fid) === String(objectId);
+            return isEqual;
+          });
+
+          if (feature) {
+            // geometry 타입에 따라 하이라이트 스타일 적용
+            const geometry = feature.getGeometry();
+            if (geometry) {
+              const type = geometry.getType();
+
+              let style = null;
+              if (type === "Point") {
+                style = new Style({
+                  image: new Circle({
+                    radius: 12,
+                    fill: new Fill({ color: "#fffde7" }),
+                    stroke: new Stroke({ color: "#ff9800", width: 5 }),
+                  }),
+                });
+              } else if (type === "LineString") {
+                style = new Style({
+                  stroke: new Stroke({ color: "#ff9800", width: 6 }),
+                });
+              } else if (type === "Polygon") {
+                style = new Style({
+                  fill: new Fill({ color: "rgba(255, 235, 59, 0.3)" }),
+                  stroke: new Stroke({ color: "#ff9800", width: 4 }),
+                });
+              } else if (type === "Circle") {
+                style = new Style({
+                  fill: new Fill({ color: "rgba(255, 235, 59, 0.2)" }),
+                  stroke: new Stroke({ color: "#ff9800", width: 4 }),
+                });
+              }
+
+              if (style) {
+                feature.setStyle(style);
+                feature.changed();
+              }
+
+              // 패닝 - geometry 타입별로 다르게 처리
+              if (type === "Point") {
+                const coords = geometry.getCoordinates();
+                if (Array.isArray(coords) && coords.length >= 2) {
+                  mapRef.current
+                    .getView()
+                    .animate({ center: coords, duration: 500 });
+                }
+              } else if (type === "LineString") {
+                const coords = geometry.getCoordinates();
+                if (Array.isArray(coords) && coords.length > 0) {
+                  // 첫번째 포인트로 패닝
+                  mapRef.current
+                    .getView()
+                    .animate({ center: coords[0], duration: 500 });
+                }
+              } else if (type === "Polygon") {
+                const coords = geometry.getCoordinates();
+                if (
+                  Array.isArray(coords) &&
+                  coords.length > 0 &&
+                  Array.isArray(coords[0]) &&
+                  coords[0].length > 0
+                ) {
+                  // 폴리곤의 첫번째 포인트로 패닝
+                  mapRef.current
+                    .getView()
+                    .animate({ center: coords[0][0], duration: 500 });
+                }
+              } else if (type === "Circle") {
+                const coords = geometry.getCenter();
+                if (coords) {
+                  mapRef.current
+                    .getView()
+                    .animate({ center: coords, duration: 500 });
+                }
+              }
+            }
+          }
+          return;
+        }
+
+        // 그 외(GCP/이착륙)는 기존대로 gcpLayer에서 찾기
+        if (!gcpLayerRef.current || !mapRef.current) return;
         const { source } = gcpLayerRef.current;
         const features = source.getFeatures();
-        // 모든 feature 스타일 초기화 (라벨 동적 적용)
         features.forEach((feature) => {
           const name = feature.get("properties")?.name || "";
           feature.setStyle(
@@ -643,10 +804,14 @@ const MapTest = forwardRef(
           );
           feature.changed();
         });
+
         const feature = features.find((f) => {
           const props = f.get("properties");
-          return props && props.objectId === objectId;
+          const fid = props && props.objectId;
+          const isEqual = String(fid) === String(objectId);
+          return isEqual;
         });
+
         if (feature) {
           const name = feature.get("properties")?.name || "";
           let style = new Style({
@@ -683,9 +848,19 @@ const MapTest = forwardRef(
       const handleFeatureClick = (evt) => {
         map.forEachFeatureAtPixel(evt.pixel, (feature) => {
           if (polygonSource.getFeatures().includes(feature)) {
+            // feature의 objectId 가져오기
+            const objectId = feature.get("objectId");
+
+            // feature ID 설정 (꼭짓점 마커용)
             setSelectedFeatureId(
               feature.ol_uid || feature.getId() || feature.uid
             );
+
+            // 그리드 행 선택 요청
+            if (typeof onFeatureSelect === "function" && currentTab === 2) {
+              onFeatureSelect(objectId);
+            }
+
             return true;
           }
           return false;
@@ -695,7 +870,7 @@ const MapTest = forwardRef(
       return () => {
         map.un("click", handleFeatureClick);
       };
-    }, []);
+    }, [currentTab, onFeatureSelect]);
 
     // 꼭짓점 마커 동기화 함수 (선택된 Feature만, 원은 제외)
     function updateVertexMarkers() {
@@ -748,7 +923,58 @@ const MapTest = forwardRef(
       };
     }, []);
 
-    // Shift 키로만 수정 가능하게 (임무탭에서만)
+    // 임무 탭에서 transform 인터랙션 추가 (스케일, 회전, 이동)
+    useEffect(() => {
+      if (currentTab !== 2) return;
+      const map = mapRef.current;
+      const polygonSource = polygonSourceRef.current;
+      if (!map || !polygonSource) return;
+
+      // transform 인터랙션 생성
+      const transform = new TransformInteraction({
+        enableRotation: true, // 회전 활성화
+        enableScale: true, // 크기 조절 활성화
+        stretchy: false, // 비율 유지
+        source: polygonSource,
+        translate: true, // 이동 활성화
+        scale: true, // 크기 조절 활성화
+        rotate: true, // 회전 활성화
+        keepAspectRatio: false, // 비율 유지 여부
+        condition: shiftKeyOnly, // Shift 키를 누른 상태에서만 활성화
+      });
+
+      // 변환 완료 이벤트
+      transform.on("transformend", function (e) {
+        // 변환된 feature 가져오기
+        const feature = e.feature;
+        const objectId = feature.get("objectId");
+        const geometry = feature.getGeometry();
+
+        if (typeof handleFeatureMoved === "function" && objectId) {
+          // 그리드 업데이트 요청
+          handleFeatureMoved({
+            objectId: objectId,
+            geometry: {
+              type: geometry.getType(),
+              coordinates: geometry.getCoordinates(),
+              radius:
+                geometry.getType() === "Circle" ? geometry.getRadius() : null,
+            },
+            properties: feature.get("properties") || {},
+          });
+        }
+      });
+
+      // 맵에 인터랙션 추가
+      map.addInteraction(transform);
+
+      // cleanup
+      return () => {
+        map.removeInteraction(transform);
+      };
+    }, [currentTab, handleFeatureMoved]);
+
+    // Shift 키로만 vertex 편집 가능하게 (임무탭에서만)
     useEffect(() => {
       if (currentTab !== 2) return;
       const map = mapRef.current;
@@ -767,6 +993,38 @@ const MapTest = forwardRef(
               }),
             }),
           });
+
+          // Feature 수정 완료 시 이벤트 핸들러 추가
+          modify.on("modifyend", (event) => {
+            // 수정된 features
+            const features = event.features.getArray();
+            features.forEach((feature) => {
+              // 수정된 feature의 objectId와 geometry 정보 가져오기
+              const objectId = feature.get("objectId");
+              const geometry = feature.getGeometry();
+              if (!objectId || !geometry) return;
+
+              // 그리드에 업데이트할 데이터 생성
+              const updatedFeature = {
+                objectId: objectId,
+                geometry: {
+                  type: geometry.getType(),
+                  coordinates: geometry.getCoordinates(),
+                  radius:
+                    geometry.getType() === "Circle"
+                      ? geometry.getRadius()
+                      : null,
+                },
+                properties: feature.get("properties") || {},
+              };
+
+              // 그리드 업데이트 요청
+              if (typeof handleFeatureMoved === "function") {
+                handleFeatureMoved(updatedFeature);
+              }
+            });
+          });
+
           map.addInteraction(modify);
           modifyInteractionRef.current = modify;
         }
@@ -787,12 +1045,12 @@ const MapTest = forwardRef(
           modifyInteractionRef.current = null;
         }
       };
-    }, [currentTab]);
+    }, [currentTab, handleFeatureMoved]);
 
     return (
       <div
         className="gis-map-wrap"
-        style={{ width: "100%", height: "100vh", position: "relative" }}
+        style={{ width: "100%", height: "100%", position: "relative" }}
       >
         <div ref={mapContent} style={{ width: "100%", height: "100%" }}></div>
         {currentTab === 0 && (
@@ -809,7 +1067,7 @@ const MapTest = forwardRef(
             <MoveButton onToggleMovingMode={handleToggleMovingMode} />
           </>
         )}
-        {/* 임무탭: MissionButton + 모달 */}
+        {/* 임무탭: MissionButton + 모달 + MissionObjects */}
         {currentTab === 2 && (
           <>
             <div
@@ -850,6 +1108,12 @@ const MapTest = forwardRef(
                 </Button>
               </DialogActions>
             </Dialog>
+            <MissionObjects
+              map={mapRef.current}
+              isActive={currentTab === 2}
+              missionData={missionData}
+              polygonSource={polygonSourceRef.current}
+            />
           </>
         )}
         {/* TODO: 다른 탭의 버튼들 추가 */}

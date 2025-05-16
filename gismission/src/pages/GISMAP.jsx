@@ -187,6 +187,7 @@ export default function GISMAP() {
       gridRef.current &&
       typeof gridRef.current.updateRowFromMap === "function"
     ) {
+      console.log("맵에서 포인트 업데이트:", row);
       gridRef.current.updateRowFromMap(row);
     }
   };
@@ -208,6 +209,35 @@ export default function GISMAP() {
   // 맵 오브젝트 선택 시 그리드 행 포커스
   const handleMapFeatureSelect = (objectId) => {
     gridRef.current?.focusRowByObjectId(objectId);
+  };
+
+  // 임무 기능이 추가될 때 그리드에 행 추가
+  const handleMissionFeatureAdded = (featureData) => {
+    console.log("맵에서 새 임무 추가됨:", featureData);
+
+    // missionData 업데이트
+    if (missionData && missionData.features) {
+      // 기존 GeoJSON 구조가 있는 경우 feature 추가
+      setMissionData((prev) => ({
+        ...prev,
+        features: [...prev.features, featureData],
+      }));
+    } else {
+      // GeoJSON 구조가 없는 경우 새로 생성
+      setMissionData({
+        type: "FeatureCollection",
+        features: [featureData],
+      });
+    }
+
+    // 그리드 컴포넌트에 행 추가
+    if (
+      gridRef.current &&
+      typeof gridRef.current.addRowFromMap === "function" &&
+      currentTab === 2
+    ) {
+      gridRef.current.addRowFromMap(featureData);
+    }
   };
 
   return (
@@ -251,6 +281,7 @@ export default function GISMAP() {
             handleFeatureDeleted={handleFeatureDeleted}
             currentTab={currentTab}
             onFeatureSelect={handleMapFeatureSelect}
+            onMissionFeatureAdded={handleMissionFeatureAdded}
           />
         </div>
       </Box>
