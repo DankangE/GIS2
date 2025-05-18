@@ -68,11 +68,14 @@ const GCPGrid = forwardRef(
         const grid = gridRef.current.getInstance();
         grid.resetData(gcpData);
         setData(gcpData);
+
+        // 항상 첫 번째 행 선택
         setTimeout(() => {
-          if (gridRef.current && gcpData.length > 0) {
-            const grid = gridRef.current.getInstance();
-            grid.focus(0, "name");
-            handleFocusChange({ rowKey: 0 });
+          if (gridRef.current && grid.getData().length > 0) {
+            // 데이터가 있으면 첫 번째 행 선택
+            const firstRowKey = grid.getRowAt(0).rowKey;
+            grid.focus(firstRowKey, "name");
+            handleFocusChange({ rowKey: firstRowKey });
           }
         }, 100);
       }
@@ -221,15 +224,18 @@ const GCPGrid = forwardRef(
           onDeleteRow(rowToDelete.objectId);
         }
       }
-      const currentRowNum =
-        allData.findIndex((row) => row.rowKey === selectedRowKey) + 1;
-      if (currentRowNum < allData.length) {
-        grid.focus(allData[currentRowNum].rowKey, "name");
-      } else if (currentRowNum > 1) {
-        grid.focus(allData[currentRowNum - 2].rowKey, "name");
-      }
+
       grid.removeRow(selectedRowKey);
       setTimeout(markModifiedRowsAndCells, 50);
+
+      // 삭제 후 첫 번째 행 선택
+      setTimeout(() => {
+        if (grid.getData().length > 0) {
+          const firstRowKey = grid.getRowAt(0).rowKey;
+          grid.focus(firstRowKey, "name");
+          handleFocusChange({ rowKey: firstRowKey });
+        }
+      }, 100);
     };
 
     // 셀 클릭 시 편집 모드 진입
@@ -282,6 +288,15 @@ const GCPGrid = forwardRef(
       // 저장 전에 모든 선택 배경색 초기화
       clearAllSelectedBg();
       handleGridSave(processedData);
+
+      // 저장 후 첫 번째 행 선택
+      setTimeout(() => {
+        if (gridRef.current && grid.getData().length > 0) {
+          const firstRowKey = grid.getRowAt(0).rowKey;
+          grid.focus(firstRowKey, "name");
+          handleFocusChange({ rowKey: firstRowKey });
+        }
+      }, 200);
     };
 
     // 저장 후 데이터 재조회
@@ -386,6 +401,15 @@ const GCPGrid = forwardRef(
         if (rowToDelete) {
           grid.removeRow(rowToDelete.rowKey);
           setTimeout(markModifiedRowsAndCells, 50);
+
+          // 삭제 후 첫 번째 행 선택
+          setTimeout(() => {
+            if (grid.getData().length > 0) {
+              const firstRowKey = grid.getRowAt(0).rowKey;
+              grid.focus(firstRowKey, "name");
+              handleFocusChange({ rowKey: firstRowKey });
+            }
+          }, 100);
         }
       },
       focusRowByObjectId: (objectId) => {
