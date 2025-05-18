@@ -21,7 +21,11 @@ import AddButton from "../../components/buttons/AddButton.jsx";
 import DeleteButton from "../../components/buttons/DeleteButton.jsx";
 import MoveButton from "../../components/buttons/MoveButton.jsx";
 import { Select, Translate } from "ol/interaction";
-import { click, shiftKeyOnly } from "ol/events/condition";
+import {
+  click,
+  shiftKeyOnly,
+  platformModifierKeyOnly,
+} from "ol/events/condition";
 import "ol/ol.css";
 import { Style, Circle, Fill, Stroke, Text, Icon } from "ol/style";
 import VectorLayer from "ol/layer/Vector";
@@ -360,6 +364,19 @@ const MapTest = forwardRef(
             note: "",
           };
 
+          // 추가: 동일한 objectId를 가진 Feature가 이미 존재하는지 확인
+          const { source } = gcpLayerRef.current;
+          const exists = source.getFeatures().some((f) => {
+            const props = f.get("properties");
+            return props && props.objectId === newPoint.objectId;
+          });
+
+          if (exists) {
+            // 중복 ID면 다음 ID 사용
+            nextObjectIdRef.current++;
+            newPoint.objectId = nextObjectIdRef.current;
+          }
+
           const newFeature = createPointFeature(newPoint);
           gcpSource.addFeature(newFeature);
           pointFeaturesRef.current.push(newFeature);
@@ -584,7 +601,10 @@ const MapTest = forwardRef(
             },
             geometry: {
               type: geometry.getType(),
-              coordinates: geometry.getCoordinates(),
+              coordinates:
+                geometry.getType() === "Circle"
+                  ? geometry.getCenter() // Circle일 경우 중심점
+                  : geometry.getCoordinates(), // 다른 타입일 경우 좌표 배열
               radius:
                 geometry.getType() === "Circle" ? geometry.getRadius() : null,
             },
@@ -681,6 +701,43 @@ const MapTest = forwardRef(
         if (feature) {
           source.removeFeature(feature);
         }
+      },
+      // 미션 데이터 삭제 메소드 추가
+      deleteMissionFeature: (objectId) => {
+        if (!polygonSourceRef.current || !objectId) return false;
+
+        console.log("미션 피처 삭제 요청:", objectId);
+
+        // objectId로 피처 찾기
+        const features = polygonSourceRef.current.getFeatures();
+        const feature = features.find((f) => {
+          // 문자열 비교를 위해 String() 변환
+          const fid = f.get("objectId");
+          return String(fid) === String(objectId);
+        });
+
+        // 피처가 있으면 삭제
+        if (feature) {
+          console.log("미션 피처 찾음, 삭제 실행:", feature);
+          polygonSourceRef.current.removeFeature(feature);
+
+          // 선택된 피처가 삭제된 경우 선택 제거
+          if (
+            selectedFeatureId &&
+            (feature.ol_uid === selectedFeatureId ||
+              feature.getId() === selectedFeatureId ||
+              feature.uid === selectedFeatureId)
+          ) {
+            setSelectedFeatureId(null);
+          }
+
+          // 성공적으로 삭제됨
+          return true;
+        }
+
+        // 피처를 찾지 못함
+        console.log("미션 피처를 찾을 수 없음:", objectId);
+        return false;
       },
       highlightFeatureAndPan: (objectId) => {
         if (!objectId) return;
@@ -846,26 +903,63 @@ const MapTest = forwardRef(
       if (!polygonSource || !map) return;
 
       const handleFeatureClick = (evt) => {
-        map.forEachFeatureAtPixel(evt.pixel, (feature) => {
-          if (polygonSource.getFeatures().includes(feature)) {
-            // feature의 objectId 가져오기
-            const objectId = feature.get("objectId");
+        // Ctrl 키(맥에서는 Command)가 눌려있으면 TransformInteraction이 처리하므로 무시
+        if (platformModifierKeyOnly(evt)) {
+          console.log("Ctrl/Command+클릭: TransformInteraction에 위임");
+          return;
+        }
 
-            // feature ID 설정 (꼭짓점 마커용)
-            setSelectedFeatureId(
-              feature.ol_uid || feature.getId() || feature.uid
-            );
+        // Shift 키가 눌려있으면 꼭짓점 편집(Modify Interaction)이 처리하므로 무시
+        if (evt.originalEvent.shiftKey) {
+          console.log("Shift+클릭: 꼭짓점 편집 모드에 위임");
+          return;
+        }
 
-            // 그리드 행 선택 요청
-            if (typeof onFeatureSelect === "function" && currentTab === 2) {
-              onFeatureSelect(objectId);
+        // 임무 탭일 때 polygonSource에서 Feature 찾기
+        if (currentTab === 2) {
+          map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+            if (polygonSource.getFeatures().includes(feature)) {
+              // feature의 objectId 가져오기
+              const objectId = feature.get("objectId");
+
+              // feature ID 설정 (꼭짓점 마커용)
+              setSelectedFeatureId(
+                feature.ol_uid || feature.getId() || feature.uid
+              );
+
+              // 선택된 Feature 시각적으로 강조
+              console.log("Feature 일반 선택:", feature);
+
+              // 그리드 행 선택 요청
+              if (typeof onFeatureSelect === "function") {
+                onFeatureSelect(objectId);
+              }
+
+              return true;
             }
+            return false;
+          });
+        } else {
+          // GCP/이착륙 탭일 때 - 기존 레이어에서 Feature 찾기
+          let selectedObjectId = null;
+          // 클릭된 좌표에서 Feature 찾기
+          map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+            // properties에서 objectId 얻기
+            const props = feature.get("properties");
+            if (props && props.objectId) {
+              selectedObjectId = props.objectId;
+              return true;
+            }
+            return false;
+          });
 
-            return true;
+          // objectId가 있으면 onFeatureSelect 호출
+          if (selectedObjectId && typeof onFeatureSelect === "function") {
+            onFeatureSelect(selectedObjectId);
           }
-          return false;
-        });
+        }
       };
+
       map.on("click", handleFeatureClick);
       return () => {
         map.un("click", handleFeatureClick);
@@ -930,48 +1024,201 @@ const MapTest = forwardRef(
       const polygonSource = polygonSourceRef.current;
       if (!map || !polygonSource) return;
 
-      // transform 인터랙션 생성
-      const transform = new TransformInteraction({
-        enableRotation: true, // 회전 활성화
-        enableScale: true, // 크기 조절 활성화
-        stretchy: false, // 비율 유지
-        source: polygonSource,
-        translate: true, // 이동 활성화
-        scale: true, // 크기 조절 활성화
-        rotate: true, // 회전 활성화
-        keepAspectRatio: false, // 비율 유지 여부
-        condition: shiftKeyOnly, // Shift 키를 누른 상태에서만 활성화
-      });
+      console.log("임무 탭 - Transform 인터랙션 초기화 시작");
 
-      // 변환 완료 이벤트
-      transform.on("transformend", function (e) {
-        // 변환된 feature 가져오기
-        const feature = e.feature;
-        const objectId = feature.get("objectId");
-        const geometry = feature.getGeometry();
+      try {
+        // transform 인터랙션 생성
+        const transform = new TransformInteraction({
+          enableRotation: true, // 회전 활성화
+          enableScale: true, // 크기 조절 활성화
+          stretchy: false, // 비율 유지
+          source: polygonSource,
+          translate: true, // 이동 활성화
+          scale: true, // 크기 조절 활성화
+          rotate: true, // 회전 활성화
+          keepAspectRatio: false, // 비율 유지 여부
+          condition: function (e) {
+            // Ctrl 키(맥에서는 Command)가 눌려있을 때만 활성화
+            return platformModifierKeyOnly(e);
+          },
+        });
 
-        if (typeof handleFeatureMoved === "function" && objectId) {
-          // 그리드 업데이트 요청
-          handleFeatureMoved({
-            objectId: objectId,
-            geometry: {
-              type: geometry.getType(),
-              coordinates: geometry.getCoordinates(),
-              radius:
-                geometry.getType() === "Circle" ? geometry.getRadius() : null,
-            },
-            properties: feature.get("properties") || {},
-          });
-        }
-      });
+        console.log("Transform 인스턴스 생성됨:", transform);
 
-      // 맵에 인터랙션 추가
-      map.addInteraction(transform);
+        // 디버깅을 위해 전역 객체에 transform 참조 추가
+        window.debugTransform = transform;
 
-      // cleanup
-      return () => {
-        map.removeInteraction(transform);
-      };
+        // 변환 완료 이벤트에서만 로그 출력
+        transform.on("transformend", function (e) {
+          console.log("TRANSFORM END 이벤트 발생!");
+          // geometry 정보만 간결하게 출력
+          const feature = e.feature;
+          const geometry = feature.getGeometry();
+
+          console.log("=== Transform 완료 후 Geometry 정보 ===");
+          console.log("Geometry:", geometry);
+          console.log("Type:", geometry.getType());
+
+          // 타입별로 필요한 정보만 출력
+          if (geometry.getType() === "Circle") {
+            console.log("Center:", geometry.getCenter());
+            console.log("Radius:", geometry.getRadius());
+          } else {
+            console.log("Coordinates:", geometry.getCoordinates());
+          }
+
+          const objectId = feature.get("objectId");
+
+          if (typeof handleFeatureMoved === "function" && objectId) {
+            // 그리드 업데이트 요청
+            console.log("handleFeatureMoved 호출 시도");
+            const updateData = {
+              objectId: objectId,
+              geometry: {
+                type: geometry.getType(),
+                coordinates:
+                  geometry.getType() === "Circle"
+                    ? geometry.getCenter()
+                    : geometry.getCoordinates(),
+                radius:
+                  geometry.getType() === "Circle" ? geometry.getRadius() : null,
+              },
+              properties: feature.get("properties") || {},
+            };
+            console.log("전송 데이터:", updateData);
+            handleFeatureMoved(updateData);
+            console.log("handleFeatureMoved 호출 완료");
+          } else {
+            console.log("handleFeatureMoved 함수 없음 또는 objectId 없음:", {
+              handleFeatureMoved,
+              objectId,
+            });
+          }
+        });
+
+        // Feature 선택 시 로깅
+        transform.on("select", function (e) {
+          console.log("Transform - Ctrl/Command+선택됨:", e.feature);
+          if (e.feature) {
+            // 선택된 Feature 강조 표시
+            const geom = e.feature.getGeometry();
+            console.log("선택된 Feature Geometry:", geom);
+            console.log("Ctrl/Command 선택 - Transform 모드 활성화");
+          }
+        });
+
+        transform.on("translatestart", function (e) {
+          console.log("TransformInteraction: translatestart 이벤트 발생");
+          const geom = e.feature.getGeometry();
+          console.log("이동 시작 Geometry:", geom);
+          if (geom.getType() === "Circle") {
+            console.log("중심점:", geom.getCenter());
+          } else {
+            console.log("좌표:", geom.getCoordinates());
+          }
+        });
+
+        transform.on("translateend", function (e) {
+          console.log("TransformInteraction: translateend 이벤트 발생");
+          const feature = e.feature;
+          const geom = feature.getGeometry();
+          console.log("이동 완료 Geometry:", geom);
+          if (geom.getType() === "Circle") {
+            console.log("중심점:", geom.getCenter());
+          } else {
+            console.log("좌표:", geom.getCoordinates());
+          }
+
+          // 그리드에 업데이트
+          const objectId = feature.get("objectId");
+          if (typeof handleFeatureMoved === "function" && objectId) {
+            handleFeatureMoved({
+              objectId: objectId,
+              geometry: {
+                type: geom.getType(),
+                coordinates:
+                  geom.getType() === "Circle"
+                    ? geom.getCenter()
+                    : geom.getCoordinates(),
+                radius: geom.getType() === "Circle" ? geom.getRadius() : null,
+              },
+              properties: feature.get("properties") || {},
+            });
+          }
+        });
+
+        transform.on("rotateend", function (e) {
+          console.log("TransformInteraction: rotateend 이벤트 발생");
+          const feature = e.feature;
+          const geom = feature.getGeometry();
+          console.log("회전 완료 Geometry:", geom);
+          if (geom.getType() === "Circle") {
+            console.log("중심점:", geom.getCenter());
+          } else {
+            console.log("좌표:", geom.getCoordinates());
+          }
+
+          // 그리드에 업데이트
+          const objectId = feature.get("objectId");
+          if (typeof handleFeatureMoved === "function" && objectId) {
+            handleFeatureMoved({
+              objectId: objectId,
+              geometry: {
+                type: geom.getType(),
+                coordinates:
+                  geom.getType() === "Circle"
+                    ? geom.getCenter()
+                    : geom.getCoordinates(),
+                radius: geom.getType() === "Circle" ? geom.getRadius() : null,
+              },
+              properties: feature.get("properties") || {},
+            });
+          }
+        });
+
+        transform.on("scaleend", function (e) {
+          console.log("TransformInteraction: scaleend 이벤트 발생");
+          const feature = e.feature;
+          const geom = feature.getGeometry();
+          console.log("크기 조절 완료 Geometry:", geom);
+          if (geom.getType() === "Circle") {
+            console.log("중심점:", geom.getCenter());
+            console.log("반경:", geom.getRadius());
+          } else {
+            console.log("좌표:", geom.getCoordinates());
+          }
+
+          // 그리드에 업데이트
+          const objectId = feature.get("objectId");
+          if (typeof handleFeatureMoved === "function" && objectId) {
+            handleFeatureMoved({
+              objectId: objectId,
+              geometry: {
+                type: geom.getType(),
+                coordinates:
+                  geom.getType() === "Circle"
+                    ? geom.getCenter()
+                    : geom.getCoordinates(),
+                radius: geom.getType() === "Circle" ? geom.getRadius() : null,
+              },
+              properties: feature.get("properties") || {},
+            });
+          }
+        });
+
+        // 맵에 인터랙션 추가
+        map.addInteraction(transform);
+        console.log("Transform 인터랙션 맵에 추가됨");
+
+        // cleanup
+        return () => {
+          console.log("Transform 인터랙션 제거");
+          map.removeInteraction(transform);
+          delete window.debugTransform;
+        };
+      } catch (err) {
+        console.error("Transform 인터랙션 초기화 중 오류:", err);
+      }
     }, [currentTab, handleFeatureMoved]);
 
     // Shift 키로만 vertex 편집 가능하게 (임무탭에서만)

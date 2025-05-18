@@ -176,8 +176,20 @@ export default function GISMAP() {
 
   // 그리드에서 행 삭제 시 맵의 포인트도 삭제
   const handleDeleteRow = (objectId) => {
-    if (mapRef.current && typeof mapRef.current.deleteFeature === "function") {
-      mapRef.current.deleteFeature(objectId);
+    if (!mapRef.current) return;
+
+    if (currentTab === 2) {
+      // 임무 탭에서는 deleteMissionFeature 메소드 사용
+      if (typeof mapRef.current.deleteMissionFeature === "function") {
+        console.log("임무 기능 삭제 요청:", objectId);
+        const success = mapRef.current.deleteMissionFeature(objectId);
+        console.log("임무 기능 삭제 결과:", success ? "성공" : "실패");
+      }
+    } else {
+      // GCP/이착륙 탭에서는 기존 deleteFeature 메소드 사용
+      if (typeof mapRef.current.deleteFeature === "function") {
+        mapRef.current.deleteFeature(objectId);
+      }
     }
   };
 
