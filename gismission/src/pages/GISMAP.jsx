@@ -27,6 +27,20 @@ export default function GISMAP() {
     }
   }, []);
 
+  // 초기 데이터 로딩
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const gcpResponse = await fetch("/jsondatas/gcpData.json");
+        const gcpData = await gcpResponse.json();
+        setGcpData(gcpData);
+      } catch (error) {
+        console.error("초기 GCP 데이터 로드 실패:", error);
+      }
+    };
+    loadInitialData();
+  }, []);
+
   // 탭 변경 핸들러
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
@@ -39,31 +53,38 @@ export default function GISMAP() {
     ) {
       gridRef.current.clearAllSelectedBg();
     }
-  };
 
-  useEffect(() => {
+    // 탭 변경 시 데이터 재조회하여 맵 리렌더링
     const loadData = async () => {
       try {
-        // GCP 데이터 로드
-        const gcpResponse = await fetch("/jsondatas/gcpData.json");
-        const gcpData = await gcpResponse.json();
-        setGcpData(gcpData);
+        // 현재 선택된 탭에 따라 데이터 로드
+        if (newValue === 0) {
+          // GCP 데이터 로드
+          const gcpResponse = await fetch("/jsondatas/gcpData.json");
+          const gcpData = await gcpResponse.json();
+          setGcpData(gcpData);
+        } else if (newValue === 1) {
+          // 이착륙 데이터 로드
+          const landingResponse = await fetch("/jsondatas/landingData.json");
+          const landingData = await landingResponse.json();
+          setLandingData(landingData);
+        } else if (newValue === 2) {
+          // 임무 데이터 로드
+          const missionResponse = await fetch("/jsondatas/missionData.json");
+          const missionData = await missionResponse.json();
+          setMissionData(missionData);
+        }
 
-        // 이착륙 데이터 로드
-        const landingResponse = await fetch("/jsondatas/landingData.json");
-        const landingData = await landingResponse.json();
-        setLandingData(landingData);
-
-        // 임무 데이터 로드
-        const missionResponse = await fetch("/jsondatas/missionData.json");
-        const missionData = await missionResponse.json();
-        setMissionData(missionData);
+        // 맵 리프레시
+        if (mapRef.current && typeof mapRef.current.refreshMap === "function") {
+          mapRef.current.refreshMap();
+        }
       } catch (error) {
         console.error("데이터 로드 실패:", error);
       }
     };
     loadData();
-  }, []);
+  };
 
   // 현재 탭에 맞는 데이터 반환
   const getCurrentData = () => {
@@ -132,22 +153,43 @@ export default function GISMAP() {
   };
 
   // 그리드에서 저장 요청 처리
-  const handleGridSave = (dataToSave) => {
-    // TODO: 실제 저장 로직 구현
-    console.log("저장할 데이터:", dataToSave);
-    // 저장 후 전체 데이터 업데이트
-    switch (currentTab) {
-      case 0:
-        setGcpData(dataToSave);
-        break;
-      case 1:
-        setLandingData(dataToSave);
-        break;
-      case 2:
-        setMissionData(dataToSave);
-        break;
+  const handleGridSave = async (dataToSave) => {
+    try {
+      // TODO: 실제 저장 로직 구현
+      // console.log("저장할 데이터:", dataToSave);
+
+      // 저장 후 전체 데이터 업데이트
+      switch (currentTab) {
+        case 0:
+          // GCP 데이터 다시 로드
+          const gcpResponse = await fetch("/jsondatas/gcpData.json");
+          const gcpData = await gcpResponse.json();
+          setGcpData(gcpData);
+          break;
+        case 1:
+          // 이착륙 데이터 다시 로드
+          const landingResponse = await fetch("/jsondatas/landingData.json");
+          const landingData = await landingResponse.json();
+          setLandingData(landingData);
+          break;
+        case 2:
+          // 임무 데이터 다시 로드
+          const missionResponse = await fetch("/jsondatas/missionData.json");
+          const missionData = await missionResponse.json();
+          setMissionData(missionData);
+          // 맵 리랜더링 트릭: currentTab을 잠깐 바꿨다가 복원
+          setCurrentTab(1); // 다른 탭으로 변경
+          setTimeout(() => setCurrentTab(2), 0); // 다시 임무탭으로 복원
+          break;
+        default:
+          console.warn("알 수 없는 탭 인덱스:", currentTab);
+          break;
+      }
+
+      setModifiedData([]);
+    } catch (error) {
+      console.error("데이터 저장 후 로드 실패:", error);
     }
-    setModifiedData([]);
   };
 
   // 맵에서 포인트 추가 시 그리드에 행 추가
@@ -223,32 +265,36 @@ export default function GISMAP() {
     gridRef.current?.focusRowByObjectId(objectId);
   };
 
+  // MissionGrid의 현재 objectId 목록에서 가장 큰 번호 + 1 반환
+  const getNextMissionObjectId = () => {
+    if (
+      !gridRef.current ||
+      typeof gridRef.current.getAllObjectIds !== "function"
+    )
+      return "feature1";
+    const ids = gridRef.current.getAllObjectIds();
+    const nums = ids
+      .map((id) => String(id).replace("feature", ""))
+      .map((num) => parseInt(num, 10))
+      .filter((num) => !isNaN(num));
+    const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
+    return "feature" + (maxNum + 1);
+  };
+
   // 임무 기능이 추가될 때 그리드에 행 추가
   const handleMissionFeatureAdded = (featureData) => {
-    console.log("맵에서 새 임무 추가됨:", featureData);
-
-    // missionData 업데이트
-    if (missionData && missionData.features) {
-      // 기존 GeoJSON 구조가 있는 경우 feature 추가
-      setMissionData((prev) => ({
-        ...prev,
-        features: [...prev.features, featureData],
-      }));
-    } else {
-      // GeoJSON 구조가 없는 경우 새로 생성
-      setMissionData({
-        type: "FeatureCollection",
-        features: [featureData],
-      });
-    }
-
-    // 그리드 컴포넌트에 행 추가
+    // objectId를 항상 새로 생성
+    const nextObjectId = getNextMissionObjectId();
+    const newFeatureData = {
+      ...featureData,
+      objectId: nextObjectId,
+    };
     if (
       gridRef.current &&
       typeof gridRef.current.addRowFromMap === "function" &&
       currentTab === 2
     ) {
-      gridRef.current.addRowFromMap(featureData);
+      gridRef.current.addRowFromMap(newFeatureData);
     }
   };
 
@@ -294,6 +340,7 @@ export default function GISMAP() {
             currentTab={currentTab}
             onFeatureSelect={handleMapFeatureSelect}
             onMissionFeatureAdded={handleMissionFeatureAdded}
+            getNextMissionObjectId={getNextMissionObjectId}
           />
         </div>
       </Box>

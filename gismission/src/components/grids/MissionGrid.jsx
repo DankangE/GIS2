@@ -8,6 +8,8 @@ import React, {
 import Grid from "@toast-ui/react-grid";
 import "tui-grid/dist/tui-grid.css";
 import { Button, Stack } from "@mui/material";
+import KmlButton from "../buttons/KmlButton.jsx";
+import { toLonLat } from "ol/proj";
 
 // CSS 스타일 추가 - blue, orange-border, green-border, yellow-bg 클래스 정의
 const gridStyle = document.createElement("style");
@@ -68,7 +70,7 @@ const MissionGrid = forwardRef(
           notes: feature.properties?.notes ?? "",
           radius: feature.geometry?.radius ?? null,
         }));
-        console.log("MissionGrid에서 formattedData:", formattedData);
+        // console.log("MissionGrid에서 formattedData:", formattedData);
         setGridData(formattedData);
         setData(formattedData);
       }
@@ -204,6 +206,7 @@ const MissionGrid = forwardRef(
         editor: "text",
         sortable: true,
       },
+      { name: "notes", header: "비고", width: 250, editor: "text" },
       {
         name: "geometry",
         header: "Geometry",
@@ -214,9 +217,8 @@ const MissionGrid = forwardRef(
           const coordinates = row.coordinates || "[]";
           return `${type}: ${coordinates}`;
         },
-        editor: "text",
+        editor: false,
       },
-      { name: "notes", header: "비고", width: 250, editor: "text" },
     ];
 
     // 포커스 행 스타일 처리
@@ -237,9 +239,14 @@ const MissionGrid = forwardRef(
       grid.addRowClassName(rowKey, "selected-bg");
       handleFocusChange.prevRowKey = rowKey;
       markModifiedRowsAndCells();
+
+      // 행 선택 시 객체 출력
+      const rowData = grid.getRow(rowKey);
+      // console.log("=== 선택된 행 데이터 ===");
+      // console.log("objectId:", rowData.objectId);
+
       // 추가: 포커스된 row의 objectId를 상위로 전달
       if (typeof onRowFocus === "function") {
-        const rowData = grid.getRow(rowKey);
         if (rowData && rowData.objectId !== undefined) {
           onRowFocus(rowKey, rowData.objectId);
         }
@@ -268,11 +275,40 @@ const MissionGrid = forwardRef(
       setTimeout(markModifiedRowsAndCells, 50);
 
       // 삭제 후 첫 번째 행 선택
+      // 삭제 후 아래 행 또는 위 행을 안전하게 선택 (rowKey 연속성 보장 X)
       setTimeout(() => {
-        if (grid.getData().length > 0) {
-          const firstRowKey = grid.getRowAt(0).rowKey;
-          grid.focus(firstRowKey, "name");
-          handleFocusChange({ rowKey: firstRowKey });
+        const data = grid.getData();
+        if (data.length === 0) return;
+
+        // 현재 남아있는 행들의 rowKey를 오름차순 정렬
+        const sortedRowKeys = data
+          .map((row) => row.rowKey)
+          .sort((a, b) => a - b);
+
+        // 삭제된 rowKey가 배열에서 어디에 있었는지 찾음
+        let nextFocusRowKey = null;
+        for (let i = 0; i < sortedRowKeys.length; i++) {
+          if (sortedRowKeys[i] > selectedRowKey) {
+            nextFocusRowKey = sortedRowKeys[i];
+            break;
+          }
+        }
+        // 아래 행이 있으면 그 행을 선택, 없으면 위 행을 선택
+        if (nextFocusRowKey !== null) {
+          grid.focus(nextFocusRowKey, "name");
+          handleFocusChange({ rowKey: nextFocusRowKey });
+        } else {
+          // 아래 행이 없으면 가장 가까운 위의 행 선택 (즉, 마지막 행 삭제 시)
+          for (let i = sortedRowKeys.length - 1; i >= 0; i--) {
+            if (sortedRowKeys[i] < selectedRowKey) {
+              nextFocusRowKey = sortedRowKeys[i];
+              break;
+            }
+          }
+          if (nextFocusRowKey !== null) {
+            grid.focus(nextFocusRowKey, "name");
+            handleFocusChange({ rowKey: nextFocusRowKey });
+          }
         }
       }, 100);
     };
@@ -314,6 +350,7 @@ const MissionGrid = forwardRef(
       console.log("수정된 행:", modifiedRows.updatedRows);
       console.log("추가된 행:", modifiedRows.createdRows);
       console.log("삭제된 행:", modifiedRows.deletedRows);
+      alert("변경된 데이터가 콘솔에 출력되었습니다.");
 
       // 저장 전에 모든 선택 배경색 초기화
       clearAllSelectedBg();
@@ -347,7 +384,7 @@ const MissionGrid = forwardRef(
     // 셀 변경 시 변경 표시 갱신 및 row 업데이트 콜백 호출
     const handleAfterChange = (ev) => {
       markModifiedRowsAndCells();
-      console.log("handleAfterChange 호출", ev);
+      // console.log("handleAfterChange 호출", ev);
       if (!gridRef.current) return;
       const grid = gridRef.current.getInstance();
       const allData = grid.getData();
@@ -396,6 +433,90 @@ const MissionGrid = forwardRef(
       }
     };
 
+    // KML 변환 함수 (Point, LineString, Polygon, Circle 지원)
+    function geojsonFeatureToKml(feature) {
+      const { geometry, properties, objectId } = feature;
+      const name = properties?.name || objectId || "";
+      const notes = properties?.notes || "";
+      let kmlGeom = "";
+      if (!geometry || !geometry.type || !geometry.coordinates) return "";
+      // EPSG:3857 -> EPSG:4326 변환 함수
+      const convertCoord = (coord) => {
+        if (!Array.isArray(coord)) return coord;
+        if (typeof coord[0] === "number" && typeof coord[1] === "number") {
+          const [lon, lat] = toLonLat(coord);
+          return `${lon},${lat}`;
+        }
+        return coord;
+      };
+      if (geometry.type === "Point") {
+        kmlGeom = `<Point><coordinates>${convertCoord(
+          geometry.coordinates
+        )}</coordinates></Point>`;
+      } else if (geometry.type === "LineString") {
+        kmlGeom = `<LineString><coordinates>${geometry.coordinates
+          .map(convertCoord)
+          .join(" ")}</coordinates></LineString>`;
+      } else if (geometry.type === "Polygon") {
+        kmlGeom = `<Polygon><outerBoundaryIs><LinearRing><coordinates>${geometry.coordinates[0]
+          .map(convertCoord)
+          .join(" ")}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+      } else if (geometry.type === "Circle") {
+        // Circle은 중심점만 Point로 변환 (KML 표준에는 원이 없음)
+        kmlGeom = `<Point><coordinates>${convertCoord(
+          geometry.coordinates
+        )}</coordinates></Point>`;
+      }
+      return `<Placemark><name>${name}</name><description>${notes}</description>${kmlGeom}</Placemark>`;
+    }
+
+    function exportKml() {
+      if (!gridRef.current) return;
+      const grid = gridRef.current.getInstance();
+      const checkedRows = grid.getCheckedRows();
+      if (!checkedRows || checkedRows.length === 0) {
+        alert("KML로 내보낼 행을 체크하세요.");
+        return;
+      }
+      // 각 행을 GeoJSON Feature로 변환
+      const features = checkedRows.map((row) => {
+        let geometry = row.geometry;
+        if (!geometry || !geometry.type || !geometry.coordinates) {
+          // fallback: type/coordinates 필드로부터 생성
+          geometry = {
+            type: row.type,
+            coordinates: JSON.parse(row.coordinates),
+            radius: row.radius || null,
+          };
+        }
+        return {
+          type: "Feature",
+          objectId: row.objectId,
+          properties: {
+            name: row.name,
+            notes: row.notes,
+          },
+          geometry,
+        };
+      });
+      const kmlPlacemarks = features.map(geojsonFeatureToKml).join("\n");
+      const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>${kmlPlacemarks}</Document></kml>`;
+      // 다운로드
+      const blob = new Blob([kml], {
+        type: "application/vnd.google-earth.kml+xml",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "export.kml";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }
+
     // 외부에서 호출 가능한 addRowFromMap 메서드
     useImperativeHandle(ref, () => ({
       addRowFromMap: (row) => {
@@ -404,14 +525,27 @@ const MissionGrid = forwardRef(
         // 이미 해당 objectId의 행이 있으면 추가하지 않음
         const exists = grid.getData().some((r) => r.objectId === row.objectId);
         if (!exists) {
-          grid.appendRow({
+          const newRow = {
             objectId: row.objectId,
             name: row.properties?.name || "",
             type: row.geometry?.type || "",
             coordinates: JSON.stringify(row.geometry?.coordinates || []),
+            geometry: {
+              type: row.geometry?.type || "",
+              coordinates: row.geometry?.coordinates || [],
+              radius: row.geometry?.radius || null,
+            },
             notes: row.properties?.notes || "",
             radius: row.geometry?.radius || null,
-          });
+          };
+          grid.appendRow(newRow);
+
+          // 추가된 행에 포커스
+          setTimeout(() => {
+            const rowKey = grid.getRowAt(grid.getData().length - 1).rowKey;
+            grid.focus(rowKey, "name");
+            handleFocusChange({ rowKey });
+          }, 50);
         }
       },
       updateRowFromMap: (row) => {
@@ -483,6 +617,16 @@ const MissionGrid = forwardRef(
           grid.removeRowClassName(row.rowKey, "selected-bg");
         });
       },
+      getAllObjectIds: () => {
+        if (!gridRef.current) return [];
+        const grid = gridRef.current.getInstance();
+        return grid.getData().map((row) => row.objectId);
+      },
+      getCheckedRows: () => {
+        if (!gridRef.current) return [];
+        const grid = gridRef.current.getInstance();
+        return grid.getCheckedRows();
+      },
     }));
 
     return (
@@ -501,6 +645,7 @@ const MissionGrid = forwardRef(
           <Button variant="contained" onClick={handleSaveChanges}>
             저장
           </Button>
+          <KmlButton onClick={exportKml} />
         </Stack>
         <div style={{ flex: 1, minHeight: 0, height: "calc(100% - 60px)" }}>
           <Grid

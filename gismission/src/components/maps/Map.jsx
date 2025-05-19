@@ -66,7 +66,7 @@ const POINT_STYLE = {
     image: new Circle({
       radius: 8,
       fill: new Fill({ color: "blue" }),
-      stroke: new Stroke({ color: "yellow", width: 3 }),
+      stroke: new Stroke({ color: "orange", width: 3 }),
     }),
     text: new Text({
       offsetY: -12,
@@ -95,6 +95,7 @@ const MapTest = forwardRef(
       currentTab,
       onFeatureSelect,
       onMissionFeatureAdded,
+      getNextMissionObjectId,
     },
     ref
   ) => {
@@ -122,7 +123,7 @@ const MapTest = forwardRef(
     const [drawType, setDrawType] = React.useState("Polygon");
     const [selectedFeatureId, setSelectedFeatureId] = React.useState(null);
     const [missionData, setMissionData] = useState(null);
-
+    const [nums, setNums] = useState(1);
     const handleMissionButtonClick = () => setMissionModalOpen(true);
     const handleMissionModalClose = () => setMissionModalOpen(false);
     const handleDrawTypeChange = (e) => setDrawType(e.target.value);
@@ -280,16 +281,18 @@ const MapTest = forwardRef(
 
           const props = feature.get("properties");
           if (props) {
-            props.lon = parseFloat(lon);
-            props.lat = parseFloat(lat);
+            props.lon = String(lon);
+            props.lat = String(lat);
+            props.rel_alt = String(props.rel_alt ?? "");
             feature.set("properties", { ...props });
             feature.changed();
 
             if (typeof handleFeatureMoved === "function") {
               handleFeatureMoved({
                 objectId: props.objectId,
-                lat: props.lat,
-                lon: props.lon,
+                lat: String(props.lat),
+                lon: String(props.lon),
+                rel_alt: String(props.rel_alt ?? ""),
               });
             }
           }
@@ -567,33 +570,18 @@ const MapTest = forwardRef(
         const feature = event.feature;
         const geometry = feature.getGeometry();
 
+        console.log("missionData", missionData);
+
         // 다음 objectId 계산
-        // missionData의 배열 수에 맞게 nextId를 설정
-        const nextId =
-          missionData && Array.isArray(missionData.features)
-            ? missionData.features.length + 1
-            : 1;
-
-        // GeoJSON 객체로 변환
-        const geojsonFormat = new GeoJSON();
-        const geojsonObj = geojsonFormat.writeFeatureObject(feature);
-
-        // GeoJSON 객체 수정
-        geojsonObj.objectId = "feature" + nextId;
-        geojsonObj.properties = {
-          name: "",
-          notes: "",
-        };
-
-        // 원본 feature에도 같은 속성 설정
-        feature.set("objectId", "feature" + nextId);
-        feature.set("name", "");
-        feature.set("notes", "");
+        const nextId = getNextMissionObjectId();
+        // missionData && Array.isArray(missionData.features)
+        //   ? missionData.features.length + 1
+        //   : 1;
 
         // 임무 그리드에 행 추가 이벤트 발생 (부모 컴포넌트에서 처리)
         if (typeof onMissionFeatureAdded === "function" && currentTab === 2) {
           onMissionFeatureAdded({
-            objectId: "feature" + nextId,
+            objectId: "",
             type: geometry.getType(),
             properties: {
               name: "",
@@ -610,6 +598,22 @@ const MapTest = forwardRef(
             },
           });
         }
+
+        // GeoJSON 객체로 변환
+        const geojsonFormat = new GeoJSON();
+        const geojsonObj = geojsonFormat.writeFeatureObject(feature);
+
+        // GeoJSON 객체 수정
+        geojsonObj.objectId = nextId;
+        geojsonObj.properties = {
+          name: "",
+          notes: "",
+        };
+
+        // 원본 feature에도 같은 속성 설정
+        feature.set("objectId", nextId);
+        feature.set("name", "");
+        feature.set("notes", "");
       });
     };
     const handleMissionModalConfirm = () => {
@@ -812,19 +816,16 @@ const MapTest = forwardRef(
                     .animate({ center: coords[0], duration: 500 });
                 }
               } else if (type === "Polygon") {
-                const coords = geometry.getCoordinates();
-                if (
-                  Array.isArray(coords) &&
-                  coords.length > 0 &&
-                  Array.isArray(coords[0]) &&
-                  coords[0].length > 0
-                ) {
-                  // 폴리곤의 첫번째 포인트로 패닝
+                // 폴리곤의 중심값으로 패닝
+                const extent = geometry.getExtent();
+                const center = getExtentCenter(extent);
+                if (center) {
                   mapRef.current
                     .getView()
-                    .animate({ center: coords[0][0], duration: 500 });
+                    .animate({ center: center, duration: 500 });
                 }
               } else if (type === "Circle") {
+                // 원의 중심값으로 패닝
                 const coords = geometry.getCenter();
                 if (coords) {
                   mapRef.current
@@ -875,7 +876,7 @@ const MapTest = forwardRef(
             image: new Circle({
               radius: 8,
               fill: new Fill({ color: "blue" }),
-              stroke: new Stroke({ color: "yellow", width: 3 }),
+              stroke: new Stroke({ color: "red", width: 4 }),
             }),
             text: new Text({
               text: name,
@@ -1024,7 +1025,7 @@ const MapTest = forwardRef(
       const polygonSource = polygonSourceRef.current;
       if (!map || !polygonSource) return;
 
-      console.log("임무 탭 - Transform 인터랙션 초기화 시작");
+      // console.log("임무 탭 - Transform 인터랙션 초기화 시작");
 
       try {
         // transform 인터랙션 생성
@@ -1043,7 +1044,7 @@ const MapTest = forwardRef(
           },
         });
 
-        console.log("Transform 인스턴스 생성됨:", transform);
+        // console.log("Transform 인스턴스 생성됨:", transform);
 
         // 디버깅을 위해 전역 객체에 transform 참조 추가
         window.debugTransform = transform;
@@ -1208,11 +1209,11 @@ const MapTest = forwardRef(
 
         // 맵에 인터랙션 추가
         map.addInteraction(transform);
-        console.log("Transform 인터랙션 맵에 추가됨");
+        // console.log("Transform 인터랙션 맵에 추가됨");
 
         // cleanup
         return () => {
-          console.log("Transform 인터랙션 제거");
+          // console.log("Transform 인터랙션 제거");
           map.removeInteraction(transform);
           delete window.debugTransform;
         };
@@ -1256,7 +1257,10 @@ const MapTest = forwardRef(
                 objectId: objectId,
                 geometry: {
                   type: geometry.getType(),
-                  coordinates: geometry.getCoordinates(),
+                  coordinates:
+                    geometry.getType() === "Circle"
+                      ? geometry.getCenter()
+                      : geometry.getCoordinates(),
                   radius:
                     geometry.getType() === "Circle"
                       ? geometry.getRadius()

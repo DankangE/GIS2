@@ -228,12 +228,41 @@ const GCPGrid = forwardRef(
       grid.removeRow(selectedRowKey);
       setTimeout(markModifiedRowsAndCells, 50);
 
-      // 삭제 후 첫 번째 행 선택
+      // 삭제 후 바로 아래 행 선택
+      // 삭제 후 아래 행 또는 위 행을 안전하게 선택 (rowKey 연속성 보장 X)
       setTimeout(() => {
-        if (grid.getData().length > 0) {
-          const firstRowKey = grid.getRowAt(0).rowKey;
-          grid.focus(firstRowKey, "name");
-          handleFocusChange({ rowKey: firstRowKey });
+        const data = grid.getData();
+        if (data.length === 0) return;
+
+        // 현재 남아있는 행들의 rowKey를 오름차순 정렬
+        const sortedRowKeys = data
+          .map((row) => row.rowKey)
+          .sort((a, b) => a - b);
+
+        // 삭제된 rowKey가 배열에서 어디에 있었는지 찾음
+        let nextFocusRowKey = null;
+        for (let i = 0; i < sortedRowKeys.length; i++) {
+          if (sortedRowKeys[i] > selectedRowKey) {
+            nextFocusRowKey = sortedRowKeys[i];
+            break;
+          }
+        }
+        // 아래 행이 있으면 그 행을 선택, 없으면 위 행을 선택
+        if (nextFocusRowKey !== null) {
+          grid.focus(nextFocusRowKey, "name");
+          handleFocusChange({ rowKey: nextFocusRowKey });
+        } else {
+          // 아래 행이 없으면 가장 가까운 위의 행 선택 (즉, 마지막 행 삭제 시)
+          for (let i = sortedRowKeys.length - 1; i >= 0; i--) {
+            if (sortedRowKeys[i] < selectedRowKey) {
+              nextFocusRowKey = sortedRowKeys[i];
+              break;
+            }
+          }
+          if (nextFocusRowKey !== null) {
+            grid.focus(nextFocusRowKey, "name");
+            handleFocusChange({ rowKey: nextFocusRowKey });
+          }
         }
       }, 100);
     };
@@ -274,9 +303,9 @@ const GCPGrid = forwardRef(
       // 위도, 경도, 고도를 Number로 변환
       const processedData = allData.map((item) => ({
         ...item,
-        lat: Number(item.lat),
-        lon: Number(item.lon),
-        rel_alt: Number(item.rel_alt),
+        lat: String(item.lat),
+        lon: String(item.lon),
+        rel_alt: String(item.rel_alt),
       }));
 
       const modifiedRows = grid.getModifiedRows();
@@ -297,6 +326,30 @@ const GCPGrid = forwardRef(
           handleFocusChange({ rowKey: firstRowKey });
         }
       }, 200);
+
+      // 저장 후 초기 데이터(json)를 다시 불러와서 그리드에 반영
+      if (typeof fetch === "function") {
+        fetch("/jsondatas/gcpData.json")
+          .then((res) => res.json())
+          .then((data) => {
+            if (gridRef.current) {
+              const grid = gridRef.current.getInstance();
+              grid.resetData(data);
+              setData(data);
+              setTimeout(() => {
+                if (gridRef.current && data.length > 0) {
+                  const grid = gridRef.current.getInstance();
+                  grid.focus(0, "name");
+                  handleFocusChange({ rowKey: 0 });
+                }
+              }, 100);
+            }
+          })
+          .catch((err) => {
+            alert("초기 데이터를 불러오는 데 실패했습니다.");
+            console.error("gcpData.json load error:", err);
+          });
+      }
     };
 
     // 저장 후 데이터 재조회
@@ -318,7 +371,7 @@ const GCPGrid = forwardRef(
     // 셀 변경 시 변경 표시 갱신 및 포인트 추가 요청, 그리고 row 업데이트 콜백 호출
     const handleAfterChange = (ev) => {
       markModifiedRowsAndCells();
-      console.log("handleAfterChange 호출", ev);
+      // console.log("handleAfterChange 호출", ev);
       if (!gridRef.current) return;
       const grid = gridRef.current.getInstance();
       const allData = grid.getData();
@@ -349,8 +402,8 @@ const GCPGrid = forwardRef(
           row.objectId !== undefined &&
           row.lat &&
           row.lon &&
-          !isNaN(Number(row.lat)) &&
-          !isNaN(Number(row.lon)) &&
+          !isNaN(String(row.lat)) &&
+          !isNaN(String(row.lon)) &&
           typeof handleRequestAddPoint === "function"
         ) {
           handleRequestAddPoint(row);
@@ -399,15 +452,32 @@ const GCPGrid = forwardRef(
         const allData = grid.getData();
         const rowToDelete = allData.find((row) => row.objectId === objectId);
         if (rowToDelete) {
-          grid.removeRow(rowToDelete.rowKey);
+          const deletedRowKey = rowToDelete.rowKey;
+          grid.removeRow(deletedRowKey);
           setTimeout(markModifiedRowsAndCells, 50);
-
-          // 삭제 후 첫 번째 행 선택
           setTimeout(() => {
-            if (grid.getData().length > 0) {
-              const firstRowKey = grid.getRowAt(0).rowKey;
-              grid.focus(firstRowKey, "name");
-              handleFocusChange({ rowKey: firstRowKey });
+            const data = grid.getData();
+            if (data.length === 0) return;
+            // rowKey 오름차순 정렬
+            const sortedRowKeys = data
+              .map((row) => row.rowKey)
+              .sort((a, b) => a - b);
+            // 삭제된 rowKey보다 큰 첫 번째 rowKey(아래 행), 없으면 마지막(위 행)
+            let nextFocusRowKey = null;
+            for (let i = 0; i < sortedRowKeys.length; i++) {
+              if (sortedRowKeys[i] > deletedRowKey) {
+                nextFocusRowKey = sortedRowKeys[i];
+                break;
+              }
+            }
+            if (nextFocusRowKey !== null) {
+              grid.focus(nextFocusRowKey, "name");
+              handleFocusChange({ rowKey: nextFocusRowKey });
+            } else if (sortedRowKeys.length > 0) {
+              // 아래 행이 없으면 위 행(마지막)
+              nextFocusRowKey = sortedRowKeys[sortedRowKeys.length - 1];
+              grid.focus(nextFocusRowKey, "name");
+              handleFocusChange({ rowKey: nextFocusRowKey });
             }
           }, 100);
         }
